@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Card Game</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Video Background -->
+    <div class="video-background">
+      <video autoplay muted loop playsinline id="bgVideo">
+        <source src="/assets/videos/day1-complete.mp4" type="video/mp4" />
+      </video>
+      <div class="bg-overlay"></div>
+    </div>
+
+    <!-- Music Player -->
+    <audio id="bgMusic" loop preload="auto"></audio>
+
+    <!-- Music Controls -->
+    <div class="music-controls">
+      <button
+        class="music-btn playing"
+        id="musicBtn"
+        onclick="toggleMusic()"
+        title="Play/Pause Music"
+      >
+        🎵
+      </button>
+      <input
+        type="range"
+        class="volume-slider"
+        id="volumeSlider"
+        min="0"
+        max="100"
+        value="25"
+        onchange="changeVolume(this.value)"
+        title="Volume"
+      />
+      <span class="track-name" id="trackName">Loading...</span>
+    </div>
+
+    <div class="game-container">
+      <!-- Rules Overlay -->
+      <div id="rulesOverlay" class="overlay">
+        <div class="overlay-content">
+          <h2>The Sacred Rules</h2>
+          <div class="rules-text" id="rulesText">Loading...</div>
+          <p id="rulesError" style="color: #ff6666; display: none"></p>
+          <button class="btn" id="acceptBtn" onclick="acceptRules()">
+            I Understand & Accept
+          </button>
+          <p style="margin-top: 15px; font-size: 12px; color: #666">
+            Both players must accept to begin
+          </p>
+        </div>
+      </div>
+
+      <!-- Waiting for both -->
+      <div id="waitingBoth" class="waiting-both hidden">
+        <p>Waiting for both players to accept...</p>
+        <p class="dots" style="font-size: 24px"></p>
+      </div>
+
+      <!-- Game Header -->
+      <div id="gameHeader" class="header hidden">
+        <span class="day-label" id="dayLabel"></span>
+        <h2 class="day-title" id="dayTitle"></h2>
+        <p class="card-counter" id="cardCounter"></p>
+      </div>
+
+      <!-- Card -->
+      <div id="cardArea" class="card hidden">
+        <h2 id="cardTitle"></h2>
+        <p class="question" id="cardQuestion"></p>
+        <div id="optionsContainer"></div>
+        <div id="otherInput" class="hidden">
+          <textarea
+            id="customAnswer"
+            placeholder="Type your own answer here..."
+          ></textarea>
+        </div>
+        <button
+          class="btn hidden"
+          id="submitBtn"
+          onclick="submitAnswer()"
+          disabled
+        >
+          Submit Answer
+        </button>
+        <p
+          id="waitingSubmit"
+          class="hidden"
+          style="text-align: center; color: #a09070; margin-top: 15px"
+        >
+          Waiting for partner to answer...
+        </p>
+      </div>
+
+      <!-- Reveal -->
+      <div id="revealArea" class="hidden">
+        <h3
+          style="
+            color: #d4af37;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+          "
+        >
+          Answers Revealed
+        </h3>
+        <div class="reveal-section">
+          <div class="reveal-card">
+            <h4>Your Answer</h4>
+            <p id="yourChoice"></p>
+            <p
+              id="yourCustomText"
+              class="custom-text"
+              style="display: none"
+            ></p>
+          </div>
+          <div class="reveal-card">
+            <h4>Partner's Answer</h4>
+            <p id="partnerChoice"></p>
+            <p
+              id="partnerCustomText"
+              class="custom-text"
+              style="display: none"
+            ></p>
+          </div>
+        </div>
+        <p class="discussion">Discuss your answers together...</p>
+        <button class="btn" id="nextBtn" onclick="nextCard()">
+          Next Card →
+        </button>
+      </div>
+
+      <!-- Complete -->
+      <div id="completeArea" class="hidden complete-screen">
+        <h2>Journey Complete</h2>
+        <p>You have explored your desires together.</p>
+        <div class="heart">❤️</div>
+        <p style="color: #a09070; font-style: italic">
+          The map is yours to keep.
+        </p>
+        <button
+          class="btn"
+          onclick="window.location.href = '/'"
+          style="margin-top: 20px"
+        >
+          Return to Lobby
+        </button>
+      </div>
+
+      <!-- Status -->
+      <div class="status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Connecting...</span>
+      </div>
+    </div>
+
+    <!-- Day Complete Video Overlay -->
+    <div id="videoOverlay" class="video-overlay hidden">
+      <div class="day-complete-text" id="dayCompleteText">Day Complete</div>
+      <div class="video-wrapper">
+        <video id="dayVideo" playsinline controls>
+          <source src="" type="video/mp4" />
+        </video>
+      </div>
+      <button class="skip-btn" id="videoSkipBtn" onclick="closeVideo()">
+        Continue to Next Day →
+      </button>
+    </div>
+
+    <script>
+      // ============ VIDEO BACKGROUND ============
+      const bgVideo = document.getElementById("bgVideo");
+
+      const bgVideos = {
+        rules: "/assets/videos/lobby-complete.mp4",
+        day1: "/assets/videos/day1-complete.mp4",
+        day2: "/assets/videos/day2-complete.mp4",
+        day3: "/assets/videos/day3-complete.mp4",
+        day4: "/assets/videos/day4-complete.mp4",
+        day5: "/assets/videos/day5-complete.mp4",
+      };
+
+      function changeBackground(dayKey) {
+        const videoFile = bgVideos[dayKey];
+        if (!videoFile || bgVideo.src.includes(videoFile)) return;
+
+        console.log("🖼️ Changing background:", dayKey);
+
+        // Fade out
+        bgVideo.style.opacity = "0";
+
+        setTimeout(() => {
+          bgVideo.src = videoFile;
+          bgVideo.load();
+          bgVideo.play().catch(() => {});
+
+          // Fade in
+          bgVideo.style.opacity = "1";
+        }, 500);
+      }
+
+      // Add transition style to video
+      bgVideo.style.transition = "opacity 0.8s ease-in-out";
+
+      // ============ MUSIC SYSTEM (AUTO-PLAY) ============
+      const bgMusic = document.getElementById("bgMusic");
+      const musicBtn = document.getElementById("musicBtn");
+      const volumeSlider = document.getElementById("volumeSlider");
+      const trackName = document.getElementById("trackName");
+      let musicPlaying = true;
+      let currentTrack = "";
+
+      const tracks = {
+        rules: { file: "/assets/music/lobby.mp3", name: "Lobby Music" },
+        day1: {
+          file: "/assets/music/day1-salsa.mp3",
+          name: "Day 1 — Salsa Bar",
+        },
+        day2: { file: "/assets/music/day2-spa.mp3", name: "Day 2 — The Spa" },
+        day3: {
+          file: "/assets/music/day3-masquerade.mp3",
+          name: "Day 3 — Masquerade",
+        },
+        day4: {
+          file: "/assets/music/day4-intimate.mp3",
+          name: "Day 4 — Intimate",
+        },
+        day5: { file: "/assets/music/day5-dawn.mp3", name: "Day 5 — The Dawn" },
+      };
+
+      bgMusic.volume = 0.25;
+
+      function playTrack(trackKey, force = false) {
+        const track = tracks[trackKey];
+        if (!track) return;
+
+        if (currentTrack === trackKey && !force) return;
+
+        console.log("🎵 Auto-playing:", track.name);
+        currentTrack = trackKey;
+        trackName.textContent = track.name;
+
+        bgMusic.src = track.file;
+        bgMusic.load();
+
+        bgMusic
+          .play()
+          .then(() => {
+            musicBtn.textContent = "🎵";
+            musicBtn.classList.add("playing");
+            musicPlaying = true;
+            console.log("✅ Playing:", track.name);
+          })
+          .catch((err) => {
+            console.log("⚠️ Play blocked, waiting for interaction...");
+            musicBtn.textContent = "🔇";
+            musicBtn.classList.remove("playing");
+            musicPlaying = false;
+          });
+      }
+
+      function toggleMusic() {
+        if (musicPlaying) {
+          bgMusic.pause();
+          musicBtn.textContent = "🔇";
+          musicBtn.classList.remove("playing");
+          musicPlaying = false;
+        } else {
+          bgMusic
+            .play()
+            .then(() => {
+              musicBtn.textContent = "🎵";
+              musicBtn.classList.add("playing");
+              musicPlaying = true;
+            })
+            .catch(() => {});
+        }
+      }
+
+      function changeVolume(value) {
+        bgMusic.volume = value / 100;
+        localStorage.setItem("musicVolume", value);
+      }
+
+      // Load saved volume
+      const savedVolume = localStorage.getItem("musicVolume");
+      if (savedVolume) {
+        bgMusic.volume = savedVolume / 100;
+        volumeSlider.value = savedVolume;
+      }
+
+      function tryAutoPlay() {
+        if (!currentTrack) {
+          playTrack("rules");
+        } else if (!musicPlaying) {
+          bgMusic
+            .play()
+            .then(() => {
+              musicBtn.textContent = "🎵";
+              musicBtn.classList.add("playing");
+              musicPlaying = true;
+            })
+            .catch(() => {});
+        }
+      }
+
+      document.addEventListener("click", tryAutoPlay, { once: false });
+      document.addEventListener("touchstart", tryAutoPlay, { once: false });
+      document.addEventListener("keydown", tryAutoPlay, { once: false });
+      tryAutoPlay();
+
+      // ============ GAME LOGIC ============
+      const roomCode = localStorage.getItem("roomCode");
+      const playerId = localStorage.getItem("playerId");
+      const playerName = localStorage.getItem("playerName") || "Player";
+
+      if (!roomCode || !playerId) {
+        document.getElementById("rulesText").textContent =
+          "Error: No game session. Please go back to the lobby.";
+        document.getElementById("acceptBtn").disabled = true;
+      }
+
+      let questions = null;
+      let selectedOption = null;
+      let hasSubmitted = false;
+      let pollingInterval = null;
+      let currentDayIndex = -1;
+      let currentCardIndex = -1;
+      let rulesAccepted = false;
+
+      // ============ VIDEO LOCKING ============
+      let isVideoPlaying = false;
+      let isCompleteProcessing = false;
+
+      // ============ CARD STATE LOCKING ============
+      let isCardLocked = false;
+
+      // ============ STORE ALL ANSWERS FOR RESULTS ============
+      let allAnswers = [];
+      let partnerName = "Partner";
+
+      async function loadQuestions() {
+        try {
+          const res = await fetch("/questions.json");
+          if (!res.ok) throw new Error("Server returned " + res.status);
+          questions = await res.json();
+          document.getElementById("rulesText").textContent =
+            questions.sacredRules;
+          document.getElementById("acceptBtn").disabled = false;
+        } catch (err) {
+          document.getElementById("rulesText").textContent =
+            "Error loading questions. Is the server running?";
+          document.getElementById("rulesError").style.display = "block";
+          document.getElementById("rulesError").textContent = err.message;
+        }
+      }
+
+      function acceptRules() {
+        if (rulesAccepted) return;
+        rulesAccepted = true;
+        document.getElementById("acceptBtn").disabled = true;
+        document.getElementById("acceptBtn").textContent = "Accepted ✓";
+
+        fetch("/api/ready", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomCode, playerId }),
+        })
+          .then(() => {
+            document.getElementById("rulesOverlay").classList.add("hidden");
+            document.getElementById("waitingBoth").classList.remove("hidden");
+          })
+          .catch(() => {
+            rulesAccepted = false;
+            document.getElementById("acceptBtn").disabled = false;
+            document.getElementById("acceptBtn").textContent =
+              "Retry - I Understand & Accept";
+          });
+      }
+
+      function startPolling() {
+        pollingInterval = setInterval(async () => {
+          // Skip polling if video is playing or complete is processing
+          if (isVideoPlaying || isCompleteProcessing) {
+            return;
+          }
+
+          try {
+            const res = await fetch(
+              `/api/game-state?room=${roomCode}&playerId=${playerId}`,
+            );
+            const data = await res.json();
+
+            const dot = document.getElementById("statusDot");
+            const text = document.getElementById("statusText");
+            if (data.partnerConnected) {
+              dot.className = "status-dot connected";
+              text.textContent = "Partner connected";
+              // Try to get partner name from game state
+              if (data.partnerName) {
+                partnerName = data.partnerName;
+              }
+            } else {
+              dot.className = "status-dot disconnected";
+              text.textContent = "Waiting for partner...";
+            }
+
+            if (data.phase === "playing") {
+              document.getElementById("waitingBoth").classList.add("hidden");
+              document.getElementById("gameHeader").classList.remove("hidden");
+              document.getElementById("cardArea").classList.remove("hidden");
+              document.getElementById("revealArea").classList.add("hidden");
+
+              const cardChanged =
+                data.currentDay !== currentDayIndex ||
+                data.currentCard !== currentCardIndex;
+
+              if (cardChanged) {
+                // If moving to a NEW day (not just new card), play video
+                if (
+                  data.currentDay !== currentDayIndex &&
+                  currentDayIndex >= 0
+                ) {
+                  isVideoPlaying = true;
+
+                  const dayToPlay = currentDayIndex + 1; // The day that was just completed
+
+                  // Only play video if the completed day is 1-4 (not day 5)
+                  if (dayToPlay >= 1 && dayToPlay <= 4) {
+                    playDayVideo(dayToPlay, function () {
+                      isVideoPlaying = false;
+                      isCardLocked = false;
+                      continueToDay(data);
+                    });
+                    return;
+                  } else {
+                    // If we just completed day 4 and are going to day 5, no video
+                    // Just continue to day 5
+                    isVideoPlaying = false;
+                    isCardLocked = false;
+                    continueToDay(data);
+                    return;
+                  }
+                }
+
+                // If no video needed (first day), continue
+                isCardLocked = false;
+                continueToDay(data);
+              }
+            } else if (data.phase === "reveal") {
+              showReveal(data.answers);
+            } else if (data.phase === "complete") {
+              // ============ CRITICAL FIX: Only play day 5 video here ============
+              if (!isCompleteProcessing && !isVideoPlaying) {
+                console.log("🎬 Complete phase detected, playing day 5 video");
+                isCompleteProcessing = true;
+                isVideoPlaying = true;
+
+                playDayVideo(5, function () {
+                  isVideoPlaying = false;
+                  isCompleteProcessing = false;
+                  playTrack("day5", true);
+                  changeBackground("day5");
+                  showComplete();
+                });
+              }
+            }
+          } catch (err) {
+            console.error("Poll error:", err);
+          }
+        }, 1500);
+      }
+
+      function continueToDay(data) {
+        currentDayIndex = data.currentDay;
+        currentCardIndex = data.currentCard;
+        // Reset submission state for new card
+        hasSubmitted = false;
+        selectedOption = null;
+
+        const musicKey = "day" + (data.currentDay + 1);
+        playTrack(musicKey);
+        changeBackground("day" + (data.currentDay + 1));
+        showCard();
+      }
+
+      function showCard() {
+        if (!questions) return;
+        const day = questions.days[currentDayIndex];
+        if (!day) return;
+        const card = day.cards[currentCardIndex];
+        if (!card) return;
+
+        // Reset selection state
+        selectedOption = null;
+        hasSubmitted = false;
+
+        document.getElementById("dayLabel").textContent =
+          `Day ${day.dayNumber} — ${day.deckLabel}`;
+        document.getElementById("dayTitle").textContent = day.title;
+        document.getElementById("cardCounter").textContent =
+          `Card ${card.cardNumber} of ${day.cards.length}`;
+        document.getElementById("cardTitle").textContent = card.cardTitle;
+        document.getElementById("cardQuestion").textContent = card.question;
+
+        // Build options - ALWAYS include option E
+        const optionsEntries = Object.entries(card.options);
+        const hasE = optionsEntries.some(([letter]) => letter === "E");
+
+        let allOptions = [...optionsEntries];
+        if (!hasE) {
+          allOptions.push(["E", "Other: Type your own answer"]);
+        }
+
+        const optionsHTML = allOptions
+          .map(
+            ([letter, text]) =>
+              `<button class="option" onclick="selectOption('${letter}', this)">
+                    <strong style="color:#d4af37;">${letter})</strong> ${text}
+                </button>`,
+          )
+          .join("");
+
+        document.getElementById("optionsContainer").innerHTML = optionsHTML;
+        document.getElementById("otherInput").classList.add("hidden");
+        document.getElementById("submitBtn").classList.add("hidden");
+        document.getElementById("waitingSubmit").classList.add("hidden");
+        document.getElementById("cardArea").classList.remove("hidden");
+        document.getElementById("revealArea").classList.add("hidden");
+
+        // Reset pointer events on options
+        document.querySelectorAll(".option").forEach((o) => {
+          o.style.pointerEvents = "auto";
+        });
+
+        // Unlock the card
+        isCardLocked = false;
+      }
+
+      function selectOption(letter, btn) {
+        if (hasSubmitted) return;
+        if (isCardLocked) return;
+
+        document
+          .querySelectorAll(".option")
+          .forEach((o) => o.classList.remove("selected"));
+        btn.classList.add("selected");
+        selectedOption = letter;
+
+        if (letter === "E") {
+          document.getElementById("otherInput").classList.remove("hidden");
+          document.getElementById("submitBtn").classList.remove("hidden");
+          document.getElementById("submitBtn").disabled = false;
+        } else {
+          document.getElementById("otherInput").classList.add("hidden");
+          document.getElementById("submitBtn").classList.remove("hidden");
+          document.getElementById("submitBtn").disabled = false;
+        }
+      }
+
+      function submitAnswer() {
+        if (!selectedOption || hasSubmitted) return;
+        if (isCardLocked) return;
+
+        hasSubmitted = true;
+        isCardLocked = true;
+
+        document.getElementById("submitBtn").classList.add("hidden");
+        document.getElementById("waitingSubmit").classList.remove("hidden");
+        document
+          .querySelectorAll(".option")
+          .forEach((o) => (o.style.pointerEvents = "none"));
+
+        const customText =
+          selectedOption === "E"
+            ? document.getElementById("customAnswer").value.trim()
+            : null;
+
+        // ============ STORE ANSWER FOR RESULTS ============
+        const day = questions.days[currentDayIndex];
+        const card = day.cards[currentCardIndex];
+        const optionText = card.options[selectedOption] || "Custom Answer";
+
+        allAnswers.push({
+          day: currentDayIndex + 1,
+          dayTitle: day.title,
+          cardNumber: card.cardNumber,
+          cardTitle: card.cardTitle,
+          question: card.question,
+          choice: selectedOption,
+          choiceText: optionText,
+          customText: customText || null,
+          playerId: playerId,
+          playerName: playerName,
+          timestamp: new Date().toISOString(),
+        });
+
+        fetch("/api/submit-answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomCode,
+            playerId,
+            choice: selectedOption,
+            customText,
+          }),
+        }).catch(() => {});
+      }
+
+      function showReveal(answers) {
+        if (!answers) return;
+        document.getElementById("cardArea").classList.add("hidden");
+        document.getElementById("revealArea").classList.remove("hidden");
+
+        const myAnswer = answers[playerId];
+        const partnerId = Object.keys(answers).find((id) => id !== playerId);
+        const partnerAnswer = partnerId ? answers[partnerId] : null;
+
+        const day = questions.days[currentDayIndex];
+        const card = day ? day.cards[currentCardIndex] : null;
+        const options = card ? card.options : {};
+
+        if (myAnswer) {
+          const choiceLetter = myAnswer.choice;
+          const fullText = options[choiceLetter] || "Custom Answer";
+
+          document.getElementById("yourChoice").innerHTML = `
+            <strong style="color:#d4af37;">You chose ${choiceLetter}:</strong><br>
+            <span style="line-height:1.6;">${fullText}</span>
+        `;
+
+          const yourCustom = document.getElementById("yourCustomText");
+          if (myAnswer.customText) {
+            yourCustom.innerHTML = `<strong style="color:#d4af37;">Your custom answer:</strong><br>"${myAnswer.customText}"`;
+            yourCustom.style.display = "block";
+          } else {
+            yourCustom.style.display = "none";
+          }
+        }
+
+        if (partnerAnswer) {
+          const partnerChoice = partnerAnswer.choice;
+          const partnerFullText = options[partnerChoice] || "Custom Answer";
+
+          document.getElementById("partnerChoice").innerHTML = `
+            <strong style="color:#d4af37;">Partner chose ${partnerChoice}:</strong><br>
+            <span style="line-height:1.6;">${partnerFullText}</span>
+        `;
+
+          const partnerCustom = document.getElementById("partnerCustomText");
+          if (partnerAnswer.customText) {
+            partnerCustom.innerHTML = `<strong style="color:#d4af37;">Partner's custom answer:</strong><br>"${partnerAnswer.customText}"`;
+            partnerCustom.style.display = "block";
+          } else {
+            partnerCustom.style.display = "none";
+          }
+        }
+
+        document.getElementById("nextBtn").disabled = false;
+        document.getElementById("nextBtn").textContent = "Next Card →";
+      }
+
+      function nextCard() {
+        document.getElementById("nextBtn").disabled = true;
+        document.getElementById("nextBtn").textContent =
+          "Waiting for partner...";
+        fetch("/api/next-card", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomCode, playerId }),
+        }).catch(() => {});
+      }
+
+      // ============ SHOW COMPLETE WITH RESULTS SAVING ============
+      function showComplete() {
+        clearInterval(pollingInterval);
+        document.getElementById("cardArea").classList.add("hidden");
+        document.getElementById("revealArea").classList.add("hidden");
+        document.getElementById("completeArea").classList.remove("hidden");
+
+        // Save results to server
+        saveResults();
+      }
+
+      async function saveResults() {
+        try {
+          const results = {
+            player1: playerName,
+            player2: partnerName,
+            roomCode: roomCode,
+            answers: allAnswers,
+            totalCards: allAnswers.length,
+            completedAt: new Date().toISOString(),
+          };
+
+          console.log("📊 Saving results:", results);
+
+          const response = await fetch("/api/save-results", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              roomCode: roomCode,
+              results: results,
+            }),
+          });
+
+          const data = await response.json();
+          console.log("✅ Results saved:", data);
+        } catch (error) {
+          console.error("❌ Error saving results:", error);
+        }
+      }
+
+      // ============ END OF DAY VIDEO (WITH CONTROLS) ============
+      const videos = {
+        day1: "/assets/videos/day1-complete.mp4",
+        day2: "/assets/videos/day2-complete.mp4",
+        day3: "/assets/videos/day3-complete.mp4",
+        day4: "/assets/videos/day4-complete.mp4",
+        day5: "/assets/videos/day5-complete.mp4",
+      };
+
+      let videoCallback = null;
+
+      function playDayVideo(dayNumber, callback) {
+        const videoFile = videos["day" + dayNumber];
+        if (!videoFile) {
+          if (callback) callback();
+          return;
+        }
+
+        console.log("🎬 Playing day video:", dayNumber);
+
+        const overlay = document.getElementById("videoOverlay");
+        const video = document.getElementById("dayVideo");
+        const dayText = document.getElementById("dayCompleteText");
+        const skipBtn = document.getElementById("videoSkipBtn");
+
+        videoCallback = callback;
+
+        if (dayNumber === 5) {
+          skipBtn.textContent = "Complete Journey →";
+        } else {
+          skipBtn.textContent = "Continue to Next Day →";
+        }
+
+        if (musicPlaying) {
+          bgMusic.pause();
+          console.log("🔇 Background music paused for video");
+        }
+
+        if (bgVideo) {
+          bgVideo.pause();
+        }
+
+        dayText.textContent = "Day " + dayNumber + " Complete";
+
+        if (video.src !== videoFile) {
+          video.src = videoFile;
+          video.load();
+        }
+
+        video.muted = false;
+        video.volume = 0.8;
+        video.currentTime = 0;
+
+        overlay.classList.remove("hidden");
+
+        video
+          .play()
+          .then(() => {
+            console.log("🎬 Playing day video with audio");
+          })
+          .catch((err) => {
+            console.log("⚠️ Video play failed:", err.message);
+            video.muted = true;
+            video.play().catch(() => {});
+          });
+
+        video.onended = null;
+      }
+
+      function closeVideo() {
+        console.log("🔚 Closing video overlay");
+
+        const overlay = document.getElementById("videoOverlay");
+        const video = document.getElementById("dayVideo");
+
+        video.pause();
+        video.currentTime = 0;
+        overlay.classList.add("hidden");
+
+        if (bgVideo) {
+          bgVideo.play().catch(() => {});
+        }
+
+        if (musicPlaying) {
+          bgMusic
+            .play()
+            .then(() => {
+              console.log("🎵 Background music resumed");
+            })
+            .catch(() => {
+              console.log("⚠️ Music resume failed");
+            });
+        }
+
+        if (videoCallback) {
+          const callback = videoCallback;
+          videoCallback = null;
+          callback();
+        }
+      }
+
+      document
+        .getElementById("dayVideo")
+        .addEventListener("ended", function () {
+          const skipBtn = document.getElementById("videoSkipBtn");
+          if (skipBtn.textContent !== "Complete Journey →") {
+            setTimeout(() => {
+              if (
+                !document
+                  .getElementById("videoOverlay")
+                  .classList.contains("hidden")
+              ) {
+                closeVideo();
+              }
+            }, 1500);
+          }
+        });
+
+      // Start everything
+      loadQuestions();
+      startPolling();
+    </script>
+  </body>
+</html>

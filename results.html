@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Results</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Georgia", "Times New Roman", serif;
+        background: #1a1a2e;
+        color: #e0d5c1;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+        padding: 30px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        border: 1px solid rgba(212, 175, 55, 0.3);
+      }
+
+      .header h1 {
+        color: #d4af37;
+        font-size: 2.2em;
+        text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+      }
+
+      .header .subtitle {
+        color: #a09070;
+        margin-top: 8px;
+        font-style: italic;
+      }
+
+      .search-box {
+        width: 100%;
+        max-width: 400px;
+        padding: 14px 20px;
+        margin: 0 auto 20px;
+        display: block;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(212, 175, 55, 0.3);
+        border-radius: 10px;
+        color: #e0d5c1;
+        font-size: 16px;
+        font-family: inherit;
+        transition: border-color 0.3s;
+      }
+
+      .search-box:focus {
+        outline: none;
+        border-color: #d4af37;
+        box-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+      }
+
+      .search-box::placeholder {
+        color: #6a6050;
+      }
+
+      .stats-bar {
+        display: flex;
+        justify-content: center;
+        gap: 30px;
+        margin-bottom: 25px;
+        flex-wrap: wrap;
+      }
+
+      .stat-item {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 10px 20px;
+        border-radius: 10px;
+        border: 1px solid rgba(212, 175, 55, 0.15);
+      }
+
+      .stat-item .number {
+        color: #d4af37;
+        font-size: 1.5em;
+        font-weight: bold;
+      }
+
+      .stat-item .label {
+        color: #a09070;
+        font-size: 0.8em;
+        margin-left: 5px;
+      }
+
+      .no-results {
+        text-align: center;
+        padding: 60px 20px;
+        color: #a09070;
+        font-style: italic;
+      }
+
+      .no-results .icon {
+        font-size: 3em;
+        margin-bottom: 15px;
+        display: block;
+      }
+
+      .result-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(212, 175, 55, 0.2);
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 20px;
+        transition: all 0.3s;
+      }
+
+      .result-card:hover {
+        border-color: rgba(212, 175, 55, 0.4);
+        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.3);
+      }
+
+      .result-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+      }
+
+      .result-header .room {
+        color: #d4af37;
+        font-size: 1.3em;
+        font-weight: bold;
+      }
+
+      .result-header .meta {
+        color: #a09070;
+        font-size: 0.85em;
+      }
+
+      .result-header .meta span {
+        display: inline-block;
+        margin-left: 15px;
+      }
+
+      .result-header .meta .players {
+        color: #c0b090;
+      }
+
+      .answers-list {
+        margin-top: 10px;
+      }
+
+      .answer-item {
+        padding: 12px 15px;
+        border-bottom: 1px solid rgba(212, 175, 55, 0.08);
+        transition: background 0.2s;
+      }
+
+      .answer-item:last-child {
+        border-bottom: none;
+      }
+
+      .answer-item:hover {
+        background: rgba(212, 175, 55, 0.05);
+      }
+
+      .answer-item .day-badge {
+        display: inline-block;
+        background: rgba(212, 175, 55, 0.15);
+        color: #d4af37;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.75em;
+        margin-right: 10px;
+      }
+
+      .answer-item .question {
+        color: #c0b090;
+        font-style: italic;
+        margin: 5px 0;
+      }
+
+      .answer-item .choice {
+        color: #e0d5c1;
+        margin: 5px 0;
+      }
+
+      .answer-item .choice .letter {
+        color: #d4af37;
+        font-weight: bold;
+      }
+
+      .answer-item .custom-text {
+        color: #d4af37;
+        font-style: italic;
+        margin: 5px 0 0 20px;
+        padding: 5px 10px;
+        border-left: 2px solid #d4af37;
+        background: rgba(212, 175, 55, 0.05);
+        border-radius: 0 5px 5px 0;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 12px 25px;
+        background: linear-gradient(135deg, #d4af37, #b8960f);
+        color: #1a1a2e;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: bold;
+        font-family: inherit;
+        font-size: 1em;
+        text-decoration: none;
+        transition: all 0.3s;
+        margin-top: 10px;
+      }
+
+      .btn:hover {
+        box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+        transform: translateY(-2px);
+      }
+
+      .back-link {
+        text-align: center;
+        margin-top: 30px;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #a09070;
+      }
+
+      .loading .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(212, 175, 55, 0.2);
+        border-top: 3px solid #d4af37;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.3);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(212, 175, 55, 0.3);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(212, 175, 55, 0.5);
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        .header h1 {
+          font-size: 1.6em;
+        }
+        .stats-bar {
+          gap: 15px;
+        }
+        .stat-item {
+          padding: 8px 15px;
+        }
+        .result-header {
+          flex-direction: column;
+        }
+        .result-header .meta span {
+          display: block;
+          margin-left: 0;
+          margin-top: 5px;
+        }
+        .answer-item {
+          padding: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>📊 Game Results</h1>
+        <p class="subtitle">View all completed game sessions</p>
+      </div>
+
+      <input
+        type="text"
+        class="search-box"
+        id="searchInput"
+        placeholder="🔍 Search by Room Code..."
+        onkeyup="filterResults()"
+      />
+
+      <div class="stats-bar" id="statsBar">
+        <div class="stat-item">
+          <span class="number" id="totalGames">0</span>
+          <span class="label">Games</span>
+        </div>
+        <div class="stat-item">
+          <span class="number" id="totalAnswers">0</span>
+          <span class="label">Answers</span>
+        </div>
+      </div>
+
+      <div id="resultsContainer">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading results...</p>
+        </div>
+      </div>
+
+      <div class="back-link">
+        <a href="/" class="btn">← Back to Lobby</a>
+      </div>
+    </div>
+
+    <script>
+      let allResults = [];
+
+      async function loadResults() {
+        try {
+          const response = await fetch("/api/get-results");
+          const data = await response.json();
+
+          if (data.success && data.results && data.results.length > 0) {
+            allResults = data.results;
+            updateStats(allResults);
+            displayResults(allResults);
+          } else {
+            document.getElementById("resultsContainer").innerHTML = `
+                        <div class="no-results">
+                            <span class="icon">📭</span>
+                            <p>No results found yet.</p>
+                            <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
+                                Complete a game to see results here.
+                            </p>
+                        </div>
+                    `;
+            document.getElementById("statsBar").style.display = "none";
+          }
+        } catch (error) {
+          console.error("Error loading results:", error);
+          document.getElementById("resultsContainer").innerHTML = `
+                    <div class="no-results">
+                        <span class="icon">⚠️</span>
+                        <p>Error loading results.</p>
+                        <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
+                            ${error.message}
+                        </p>
+                    </div>
+                `;
+        }
+      }
+
+      function updateStats(results) {
+        const totalGames = results.length;
+        const totalAnswers = results.reduce(
+          (sum, r) => sum + (r.totalCards || r.answers?.length || 0),
+          0,
+        );
+
+        document.getElementById("totalGames").textContent = totalGames;
+        document.getElementById("totalAnswers").textContent = totalAnswers;
+        document.getElementById("statsBar").style.display = "flex";
+      }
+
+      function displayResults(results) {
+        const container = document.getElementById("resultsContainer");
+
+        if (results.length === 0) {
+          container.innerHTML = `
+                    <div class="no-results">
+                        <span class="icon">🔍</span>
+                        <p>No results match your search.</p>
+                    </div>
+                `;
+          return;
+        }
+
+        container.innerHTML = results
+          .map((result, index) => {
+            const answers = result.answers || [];
+            const totalCards = result.totalCards || answers.length;
+            const player1 = result.player1 || "Player 1";
+            const player2 = result.player2 || "Partner";
+
+            return `
+                    <div class="result-card" data-room="${result.roomCode}">
+                        <div class="result-header">
+                            <div>
+                                <span class="room">🎮 Room: ${result.roomCode}</span>
+                            </div>
+                            <div class="meta">
+                                <span class="players">👤 ${player1} & ${player2}</span>
+                                <span>📅 ${formatDate(result.completedAt || result.timestamp || result.savedAt)}</span>
+                                <span>📝 ${totalCards} cards</span>
+                            </div>
+                        </div>
+                        <div class="answers-list">
+                            ${answers
+                              .map(
+                                (answer) => `
+                                <div class="answer-item">
+                                    <span class="day-badge">Day ${answer.day}</span>
+                                    <span style="color: #6a6050; font-size: 0.85em;">Card ${answer.cardNumber}: ${answer.cardTitle || ""}</span>
+                                    <div class="question">${answer.question}</div>
+                                    <div class="choice">
+                                        <span class="letter">${answer.choice})</span> ${answer.choiceText || answer.choice}
+                                    </div>
+                                    ${answer.customText ? `<div class="custom-text">💬 "${answer.customText}"</div>` : ""}
+                                </div>
+                            `,
+                              )
+                              .join("")}
+                        </div>
+                    </div>
+                `;
+          })
+          .join("");
+      }
+
+      function filterResults() {
+        const search = document
+          .getElementById("searchInput")
+          .value.toUpperCase()
+          .trim();
+        const cards = document.querySelectorAll(".result-card");
+        let visibleCount = 0;
+
+        cards.forEach((card) => {
+          const room = card.getAttribute("data-room").toUpperCase();
+          if (room.includes(search)) {
+            card.style.display = "block";
+            visibleCount++;
+          } else {
+            card.style.display = "none";
+          }
+        });
+
+        // Show message if no results found
+        const container = document.getElementById("resultsContainer");
+        const existingNoResults = container.querySelector(".no-results");
+
+        if (visibleCount === 0 && search !== "") {
+          if (!existingNoResults) {
+            const noResults = document.createElement("div");
+            noResults.className = "no-results";
+            noResults.innerHTML = `
+                        <span class="icon">🔍</span>
+                        <p>No results match "${search}"</p>
+                    `;
+            container.appendChild(noResults);
+          }
+        } else {
+          if (existingNoResults) {
+            existingNoResults.remove();
+          }
+        }
+      }
+
+      function formatDate(dateString) {
+        if (!dateString) return "Unknown";
+        try {
+          const date = new Date(dateString);
+          return date.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        } catch {
+          return dateString;
+        }
+      }
+
+      // Load results on page load
+      document.addEventListener("DOMContentLoaded", loadResults);
+
+      // Refresh every 30 seconds
+      setInterval(loadResults, 30000);
+    </script>
+  </body>
+</html>

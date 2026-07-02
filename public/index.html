@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Card Game - Lobby</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: Georgia, serif;
+        background: #1a1a2e;
+        color: #e0d5c1;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .container {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 40px;
+        border-radius: 20px;
+        border: 1px solid rgba(212, 175, 55, 0.3);
+        text-align: center;
+        max-width: 500px;
+        width: 90%;
+      }
+
+      h1 {
+        color: #d4af37;
+        margin-bottom: 20px;
+      }
+
+      .btn {
+        display: block;
+        width: 100%;
+        padding: 15px;
+        margin: 10px 0;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        cursor: pointer;
+        font-family: inherit;
+        font-weight: bold;
+        transition: all 0.3s;
+      }
+
+      .btn-primary {
+        background: #d4af37;
+        color: #1a1a2e;
+      }
+
+      .btn-primary:hover {
+        box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
+      }
+
+      .btn-secondary {
+        background: transparent;
+        border: 2px solid #d4af37;
+        color: #d4af37;
+      }
+
+      .input {
+        width: 100%;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 10px;
+        border: 1px solid rgba(212, 175, 55, 0.4);
+        background: rgba(0, 0, 0, 0.3);
+        color: #e0d5c1;
+        font-size: 16px;
+        font-family: inherit;
+      }
+
+      .divider {
+        color: #a09070;
+        margin: 15px 0;
+      }
+
+      .room-code {
+        font-size: 48px;
+        color: #d4af37;
+        letter-spacing: 8px;
+        font-family: monospace;
+        margin: 20px 0;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Video Background -->
+    <div class="video-background">
+      <video autoplay muted loop playsinline id="bgVideo">
+        <source src="/assets/videos/day1-salsa.mp4" type="video/mp4" />
+      </video>
+      <div class="bg-overlay"></div>
+    </div>
+    <div class="container">
+      <h1>🃏 Card Game</h1>
+
+      <div id="mainMenu">
+        <button class="btn btn-primary" onclick="createGame()">
+          Create New Game
+        </button>
+        <div class="divider">or</div>
+        <input
+          type="text"
+          id="roomCodeInput"
+          class="input"
+          placeholder="Enter Room Code"
+          maxlength="6"
+        />
+        <input
+          type="text"
+          id="playerNameInput"
+          class="input"
+          placeholder="Your Name"
+          maxlength="20"
+        />
+        <button class="btn btn-secondary" onclick="joinGame()">
+          Join Game
+        </button>
+      </div>
+
+      <div id="waitingRoom" class="hidden">
+        <p>Your Room Code:</p>
+        <div class="room-code" id="roomCodeDisplay"></div>
+        <p>Waiting for partner to join...</p>
+      </div>
+    </div>
+
+    <script>
+      const API = "/api";
+      const playerId = "player_" + Math.random().toString(36).substring(2, 9);
+
+      async function createGame() {
+        const name = prompt("Enter your name:") || "Player 1";
+
+        const res = await fetch(API + "/create-game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerId, playerName: name }),
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById("mainMenu").classList.add("hidden");
+          document.getElementById("waitingRoom").classList.remove("hidden");
+          document.getElementById("roomCodeDisplay").textContent =
+            data.roomCode;
+
+          // Store for game page
+          localStorage.setItem("roomCode", data.roomCode);
+          localStorage.setItem("playerId", playerId);
+          localStorage.setItem("playerName", name);
+
+          // Poll for partner to join
+          checkForPartner(data.roomCode);
+        }
+      }
+
+      async function joinGame() {
+        const roomCode = document
+          .getElementById("roomCodeInput")
+          .value.trim()
+          .toUpperCase();
+        const name =
+          document.getElementById("playerNameInput").value.trim() || "Player 2";
+
+        if (!roomCode) {
+          alert("Enter a room code");
+          return;
+        }
+
+        const res = await fetch(API + "/join-game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomCode, playerId, playerName: name }),
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          localStorage.setItem("roomCode", roomCode);
+          localStorage.setItem("playerId", playerId);
+          localStorage.setItem("playerName", name);
+          window.location.href = "/game.html";
+        } else {
+          alert(data.error);
+        }
+      }
+
+      function checkForPartner(roomCode) {
+        const interval = setInterval(async () => {
+          const res = await fetch(
+            API + "/game-state?room=" + roomCode + "&playerId=" + playerId,
+          );
+          const data = await res.json();
+
+          if (data.phase === "rules") {
+            clearInterval(interval);
+            window.location.href = "/game.html";
+          }
+        }, 2000);
+      }
+    </script>
+    <!-- Music Player -->
+    <audio id="bgMusic" loop>
+      <source src="/assets/music/lobby.mp3" type="audio/mpeg" />
+    </audio>
+
+    <script>
+      // Simple music player
+      const bgMusic = document.getElementById("bgMusic");
+
+      // Set volume low
+      bgMusic.volume = 0.2;
+
+      // Start music on first click anywhere
+      document.addEventListener(
+        "click",
+        function startMusic() {
+          bgMusic.play().catch(() => {});
+          document.removeEventListener("click", startMusic);
+        },
+        { once: true },
+      );
+    </script>
+  </body>
+</html>

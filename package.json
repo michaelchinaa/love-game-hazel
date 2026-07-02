@@ -1,0 +1,9 @@
+{
+  "name": "card-game",
+  "version": "1.0.0",
+  "description": "A card game for two players",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  }
+}
