@@ -8,32 +8,67 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get game state from KV
+    // Get game state
     const gameState = await kv.get(`game:${room}`);
-    
+
     if (!gameState) {
-      return res.status(404).json({ error: 'Game not found' });
+      const players = await kv.lrange(`room:${room}:players`, 0, -1);
+      return res.status(200).json({
+        phase: 'waiting',
+        partnerConnected: players.length >= 2,
+        players: players || []
+      });
     }
 
-    // Get all players in the room
+    // Get all players
     const players = await kv.lrange(`room:${room}:players`, 0, -1);
     const partnerConnected = players.length >= 2;
 
-    // Get answers for this card
-    const answersKey = `room:${room}:day:${gameState.currentDay}:card:${gameState.currentCard}:answers`;
-    const answers = await kv.hgetall(answersKey) || {};
-
     // Get partner name
     const partnerId = players.find(id => id !== playerId);
-    const partnerName = partnerId ? await kv.get(`player:${partnerId}:name`) : null;
+    let partnerName = null;
+    if (partnerId) {
+      partnerName = await kv.get(`player:${partnerId}:name`);
+    }
+
+    // Get answers for current card
+    const day = gameState.currentDay;
+    const card = gameState.currentCard;
+    const answersKey = `room:${room}:day:${day}:card:${card}:answers`;
+    const answers = await kv.hgetall(answersKey) || {};
+
+    // Parse answers
+    const parsedAnswers = {};
+    for (const [key, value] of Object.entries(answers)) {
+      try {
+        parsedAnswers[key] = JSON.parse(value);
+      } catch {
+        parsedAnswers[key] = value;
+      }
+    }
+
+    // Check if all players have answered (for the frontend to know)
+    let allAnswered = false;
+    if (gameState.phase === 'reveal') {
+      allAnswered = true;
+    } else if (players.length > 0) {
+      let answeredCount = 0;
+      for (const player of players) {
+        if (answers[player]) answeredCount++;
+      }
+      allAnswered = answeredCount === players.length;
+    }
 
     res.status(200).json({
       phase: gameState.phase || 'playing',
       currentDay: gameState.currentDay || 0,
       currentCard: gameState.currentCard || 0,
       partnerConnected,
-      answers,
-      partnerName
+      partnerName,
+      answers: parsedAnswers,
+      allAnswered,
+      players: players,
+      playerId: playerId
     });
 
   } catch (error) {

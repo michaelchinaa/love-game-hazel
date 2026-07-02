@@ -386,7 +386,6 @@
 
       function startPolling() {
         pollingInterval = setInterval(async () => {
-          // Skip polling if video is playing or complete is processing
           if (isVideoPlaying || isCompleteProcessing) {
             return;
           }
@@ -402,7 +401,6 @@
             if (data.partnerConnected) {
               dot.className = "status-dot connected";
               text.textContent = "Partner connected";
-              // Try to get partner name from game state
               if (data.partnerName) {
                 partnerName = data.partnerName;
               }
@@ -422,16 +420,13 @@
                 data.currentCard !== currentCardIndex;
 
               if (cardChanged) {
-                // If moving to a NEW day (not just new card), play video
                 if (
                   data.currentDay !== currentDayIndex &&
                   currentDayIndex >= 0
                 ) {
                   isVideoPlaying = true;
+                  const dayToPlay = currentDayIndex + 1;
 
-                  const dayToPlay = currentDayIndex + 1; // The day that was just completed
-
-                  // Only play video if the completed day is 1-4 (not day 5)
                   if (dayToPlay >= 1 && dayToPlay <= 4) {
                     playDayVideo(dayToPlay, function () {
                       isVideoPlaying = false;
@@ -440,8 +435,6 @@
                     });
                     return;
                   } else {
-                    // If we just completed day 4 and are going to day 5, no video
-                    // Just continue to day 5
                     isVideoPlaying = false;
                     isCardLocked = false;
                     continueToDay(data);
@@ -449,14 +442,35 @@
                   }
                 }
 
-                // If no video needed (first day), continue
                 isCardLocked = false;
                 continueToDay(data);
+              } else {
+                // Same card - check if we need to show waiting or reveal
+                if (data.allAnswered && data.phase === "reveal") {
+                  // Both answered, show reveal
+                  showReveal(data.answers);
+                } else if (data.answers && data.answers[playerId]) {
+                  // We've answered, waiting for partner
+                  document.getElementById("submitBtn").classList.add("hidden");
+                  document
+                    .getElementById("waitingSubmit")
+                    .classList.remove("hidden");
+                  document.querySelectorAll(".option").forEach((o) => {
+                    o.style.pointerEvents = "none";
+                  });
+                  // Keep the selected option highlighted
+                  if (selectedOption) {
+                    document.querySelectorAll(".option").forEach((o) => {
+                      if (o.textContent.includes(`${selectedOption})`)) {
+                        o.classList.add("selected");
+                      }
+                    });
+                  }
+                }
               }
             } else if (data.phase === "reveal") {
               showReveal(data.answers);
             } else if (data.phase === "complete") {
-              // ============ CRITICAL FIX: Only play day 5 video here ============
               if (!isCompleteProcessing && !isVideoPlaying) {
                 console.log("🎬 Complete phase detected, playing day 5 video");
                 isCompleteProcessing = true;
@@ -474,9 +488,8 @@
           } catch (err) {
             console.error("Poll error:", err);
           }
-        }, 1500);
+        }, 2000); // Increased from 1500ms to 2000ms to reduce race conditions
       }
-
       function continueToDay(data) {
         currentDayIndex = data.currentDay;
         currentCardIndex = data.currentCard;
@@ -500,6 +513,7 @@
         // Reset selection state
         selectedOption = null;
         hasSubmitted = false;
+        isCardLocked = false;
 
         document.getElementById("dayLabel").textContent =
           `Day ${day.dayNumber} — ${day.deckLabel}`;
@@ -522,8 +536,8 @@
           .map(
             ([letter, text]) =>
               `<button class="option" onclick="selectOption('${letter}', this)">
-                          <strong style="color:#d4af37;">${letter})</strong> ${text}
-                      </button>`,
+              <strong style="color:#d4af37;">${letter})</strong> ${text}
+          </button>`,
           )
           .join("");
 
@@ -539,10 +553,9 @@
           o.style.pointerEvents = "auto";
         });
 
-        // Unlock the card
-        isCardLocked = false;
+        // Hide waiting message
+        document.getElementById("waitingSubmit").classList.add("hidden");
       }
-
       function selectOption(letter, btn) {
         if (hasSubmitted) return;
         if (isCardLocked) return;

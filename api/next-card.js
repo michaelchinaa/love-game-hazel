@@ -18,30 +18,42 @@ export default async function handler(req, res) {
    return res.status(404).json({ error: 'Game not found' });
   }
 
-  let { currentDay, currentCard, phase } = gameState;
+  // Reset phase to playing
+  gameState.phase = 'playing';
 
   // Move to next card
-  currentCard += 1;
+  gameState.currentCard += 1;
 
   // Check if we need to move to next day
   // You'll need to know the total cards per day
-  // This assumes 5 cards per day (adjust as needed)
-  const cardsPerDay = 5;
-  if (currentCard >= cardsPerDay) {
-   currentCard = 0;
-   currentDay += 1;
-   phase = 'playing';
+  const cardsPerDay = 5; // Adjust this based on your actual cards per day
+  if (gameState.currentCard >= cardsPerDay) {
+   gameState.currentCard = 0;
+   gameState.currentDay += 1;
+
+   // Check if game is complete (5 days)
+   if (gameState.currentDay >= 5) {
+    gameState.phase = 'complete';
+    await kv.set(`game:${roomCode}`, gameState);
+    return res.status(200).json({
+     success: true,
+     phase: 'complete',
+     message: 'Game complete!'
+    });
+   }
   }
 
-  // Update game state
-  const newState = { currentDay, currentCard, phase };
-  await kv.set(`game:${roomCode}`, newState);
+  // Save updated state
+  await kv.set(`game:${roomCode}`, gameState);
+
+  // Clean up old answers for new card (optional)
+  // We'll keep them for debugging but frontend won't show them
 
   res.status(200).json({
    success: true,
-   currentDay,
-   currentCard,
-   phase
+   currentDay: gameState.currentDay,
+   currentCard: gameState.currentCard,
+   phase: gameState.phase
   });
 
  } catch (error) {
