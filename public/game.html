@@ -522,8 +522,8 @@
           .map(
             ([letter, text]) =>
               `<button class="option" onclick="selectOption('${letter}', this)">
-                    <strong style="color:#d4af37;">${letter})</strong> ${text}
-                </button>`,
+                          <strong style="color:#d4af37;">${letter})</strong> ${text}
+                      </button>`,
           )
           .join("");
 
@@ -564,7 +564,7 @@
         }
       }
 
-      function submitAnswer() {
+      async function submitAnswer() {
         if (!selectedOption || hasSubmitted) return;
         if (isCardLocked) return;
 
@@ -601,18 +601,17 @@
           timestamp: new Date().toISOString(),
         });
 
-        fetch("/api/submit-answer", {
+        const response = await fetch("/api/submit-answer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            roomCode,
-            playerId,
+            roomCode: roomCode,
+            playerId: playerId,
             choice: selectedOption,
-            customText,
+            customText: customText,
           }),
-        }).catch(() => {});
+        });
       }
-
       function showReveal(answers) {
         if (!answers) return;
         document.getElementById("cardArea").classList.add("hidden");
@@ -631,9 +630,9 @@
           const fullText = options[choiceLetter] || "Custom Answer";
 
           document.getElementById("yourChoice").innerHTML = `
-            <strong style="color:#d4af37;">You chose ${choiceLetter}:</strong><br>
-            <span style="line-height:1.6;">${fullText}</span>
-        `;
+                  <strong style="color:#d4af37;">You chose ${choiceLetter}:</strong><br>
+                  <span style="line-height:1.6;">${fullText}</span>
+              `;
 
           const yourCustom = document.getElementById("yourCustomText");
           if (myAnswer.customText) {
@@ -649,9 +648,9 @@
           const partnerFullText = options[partnerChoice] || "Custom Answer";
 
           document.getElementById("partnerChoice").innerHTML = `
-            <strong style="color:#d4af37;">Partner chose ${partnerChoice}:</strong><br>
-            <span style="line-height:1.6;">${partnerFullText}</span>
-        `;
+                  <strong style="color:#d4af37;">Partner chose ${partnerChoice}:</strong><br>
+                  <span style="line-height:1.6;">${partnerFullText}</span>
+              `;
 
           const partnerCustom = document.getElementById("partnerCustomText");
           if (partnerAnswer.customText) {
@@ -666,15 +665,12 @@
         document.getElementById("nextBtn").textContent = "Next Card →";
       }
 
-      function nextCard() {
-        document.getElementById("nextBtn").disabled = true;
-        document.getElementById("nextBtn").textContent =
-          "Waiting for partner...";
-        fetch("/api/next-card", {
+      async function nextCard() {
+        const response = await fetch("/api/next-card", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ roomCode, playerId }),
-        }).catch(() => {});
+        });
       }
 
       // ============ SHOW COMPLETE WITH RESULTS SAVING ============

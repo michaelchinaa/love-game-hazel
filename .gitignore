@@ -36,3 +36,5 @@ out/
 
 # Vercel
 .vercel/
+.vercel
+.env*

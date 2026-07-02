@@ -1,24 +1,26 @@
-import fs from 'fs';
-import path from 'path';
+import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
  try {
-  // Use the root results.json file
-  const resultsPath = path.join(process.cwd(), 'results.json');
+  const { roomCode } = req.query;
 
   let results = [];
-  try {
-   const fileContent = fs.readFileSync(resultsPath, 'utf8');
-   results = JSON.parse(fileContent);
-  } catch (err) {
-   // File doesn't exist yet
-   results = [];
-  }
 
-  // If roomCode is provided, filter results
-  const { roomCode } = req.query;
   if (roomCode) {
-   results = results.filter(r => r.roomCode === roomCode);
+   // Get specific room results
+   const result = await kv.get(`results:${roomCode}`);
+   if (result) {
+    results = [result];
+   }
+  } else {
+   // Get all results
+   const roomCodes = await kv.lrange('results:all', 0, -1);
+   for (const code of roomCodes) {
+    const result = await kv.get(`results:${code}`);
+    if (result) {
+     results.push(result);
+    }
+   }
   }
 
   return res.status(200).json({

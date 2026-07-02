@@ -1,8 +1,6 @@
-import fs from 'fs';
-import path from 'path';
+import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -14,35 +12,23 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing roomCode or results' });
     }
 
-    // Use the root results.json file
-    const resultsPath = path.join(process.cwd(), 'results.json');
-
-    // Read existing results
-    let existingResults = [];
-    try {
-      const fileContent = fs.readFileSync(resultsPath, 'utf8');
-      existingResults = JSON.parse(fileContent);
-    } catch (err) {
-      // File doesn't exist yet, start with empty array
-      existingResults = [];
-    }
-
-    // Add new result with timestamp
-    const newResult = {
-      roomCode,
+    // Save results to KV
+    const key = `results:${roomCode}`;
+    await kv.set(key, {
       ...results,
       savedAt: new Date().toISOString()
-    };
+    });
 
-    existingResults.push(newResult);
+    // Add to list of all results
+    await kv.lpush('results:all', roomCode);
 
-    // Write back to file
-    fs.writeFileSync(resultsPath, JSON.stringify(existingResults, null, 2));
+    // Clean up game data
+    await kv.del(`game:${roomCode}`);
+    await kv.del(`room:${roomCode}:players`);
 
     return res.status(200).json({
       success: true,
-      message: 'Results saved successfully',
-      totalResults: existingResults.length
+      message: 'Results saved successfully'
     });
 
   } catch (error) {
