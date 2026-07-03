@@ -12,25 +12,19 @@ export default async function handler(req, res) {
    return res.status(400).json({ error: 'Missing roomCode' });
   }
 
-  // Get current game state
   const gameState = await kv.get(`game:${roomCode}`);
   if (!gameState) {
    return res.status(404).json({ error: 'Game not found' });
   }
 
-  // Reset phase to playing
   gameState.phase = 'playing';
-
-  // Move to next card
   gameState.currentCard = (gameState.currentCard || 0) + 1;
 
-  // Check if we need to move to next day
-  const cardsPerDay = 5; // Adjust based on your actual cards per day
+  const cardsPerDay = 5;
   if (gameState.currentCard >= cardsPerDay) {
    gameState.currentCard = 0;
    gameState.currentDay = (gameState.currentDay || 0) + 1;
 
-   // Check if game is complete (5 days)
    if (gameState.currentDay >= 5) {
     gameState.phase = 'complete';
     await kv.set(`game:${roomCode}`, gameState);
@@ -42,7 +36,6 @@ export default async function handler(req, res) {
    }
   }
 
-  // Save updated state
   await kv.set(`game:${roomCode}`, gameState);
 
   res.status(200).json({

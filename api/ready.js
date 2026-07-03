@@ -15,11 +15,10 @@ export default async function handler(req, res) {
   // Store player name
   await kv.set(`player:${playerId}:name`, playerName || 'Player');
 
-  // Get or create room
+  // Get or create game
   let gameState = await kv.get(`game:${roomCode}`);
 
   if (!gameState) {
-   // Create new room
    gameState = {
     phase: 'waiting',
     currentDay: 0,
@@ -36,7 +35,7 @@ export default async function handler(req, res) {
    players.push(playerId);
   }
 
-  // Update game state with players
+  // Update game state
   gameState.players = players;
 
   // If 2 players, start the game

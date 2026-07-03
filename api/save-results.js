@@ -12,17 +12,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing roomCode or results' });
     }
 
-    // Save results to KV
     const key = `results:${roomCode}`;
     await kv.set(key, {
       ...results,
       savedAt: new Date().toISOString()
     });
 
-    // Add to list of all results
     await kv.lpush('results:all', roomCode);
 
-    // Clean up game data
     await kv.del(`game:${roomCode}`);
     await kv.del(`room:${roomCode}:players`);
 
