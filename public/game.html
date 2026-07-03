@@ -740,38 +740,58 @@
         }
       }
 
+      // ============ SHOW COMPLETE WITH RESULTS SAVING ============
+      let resultsSaved = false; // Prevent duplicate saves
+
       function showComplete() {
         clearInterval(pollingInterval);
         document.getElementById("cardArea").classList.add("hidden");
         document.getElementById("revealArea").classList.add("hidden");
         document.getElementById("completeArea").classList.remove("hidden");
-        saveResults();
-      }
 
+        // Save results to server - only once
+        if (!resultsSaved) {
+          resultsSaved = true;
+          saveResults();
+        }
+      }
       async function saveResults() {
         try {
+          // ============ CRITICAL: Get ALL answers from the game ============
+          // We need to fetch the complete answers from the server
+          const response = await fetch(`/api/get-answers?roomCode=${roomCode}`);
+          const data = await response.json();
+
+          const allAnswersData = data.answers || [];
+
+          // Get player names
+          const players = await fetch(`/api/get-players?roomCode=${roomCode}`);
+          const playersData = await players.json();
+
           const results = {
             player1: playerName,
             player2: partnerName,
             roomCode: roomCode,
-            answers: allAnswers,
-            totalCards: allAnswers.length,
+            answers: allAnswersData,
+            totalCards: allAnswersData.length,
             completedAt: new Date().toISOString(),
           };
 
           console.log("📊 Saving results:", results);
 
-          const response = await fetch("/api/save-results", {
+          const saveResponse = await fetch("/api/save-results", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({
               roomCode: roomCode,
               results: results,
             }),
           });
 
-          const data = await response.json();
-          console.log("✅ Results saved:", data);
+          const saveData = await saveResponse.json();
+          console.log("✅ Results saved:", saveData);
         } catch (error) {
           console.error("❌ Error saving results:", error);
         }

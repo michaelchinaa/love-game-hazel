@@ -38,32 +38,12 @@ export default async function handler(req, res) {
 
   // Get all players in the room
   let players = await kv.lrange(`room:${roomCode}:players`, 0, -1) || [];
-
-  // ============ STRICT 2-PLAYER ENFORCEMENT ============
-  // Remove duplicates and only keep active players
   players = [...new Set(players)];
-
-  // Clean stale players
-  const activePlayers = [];
-  for (const p of players) {
-   const name = await kv.get(`player:${p}:name`);
-   if (name) activePlayers.push(p);
-  }
-
-  if (activePlayers.length !== players.length) {
-   await kv.del(`room:${roomCode}:players`);
-   for (const p of activePlayers) {
-    await kv.rpush(`room:${roomCode}:players`, p);
-   }
-   players = activePlayers;
-   gameState.players = players;
-   await kv.set(`game:${roomCode}`, gameState);
-  }
 
   // Get all answers for this card
   const answers = await kv.hgetall(answersKey);
 
-  // Check if ALL players have answered (should be exactly 2)
+  // Check if ALL players have answered
   let allAnswered = true;
   let answeredCount = 0;
   for (const player of players) {
@@ -74,10 +54,16 @@ export default async function handler(req, res) {
    }
   }
 
-  // If all 2 players answered, move to reveal phase
-  if (allAnswered && players.length === 2) {
+  // If all answered, move to reveal phase
+  if (allAnswered && players.length >= 2) {
    gameState.phase = 'reveal';
    await kv.set(`game:${roomCode}`, gameState);
+
+   // ============ CRITICAL: Store ALL answers for results ============
+   // Store the complete set of answers for this card
+   const allAnswersKey = `room:${roomCode}:day:${day}:card:${card}:all_answers`;
+   await kv.set(allAnswersKey, answers);
+   console.log(`📝 Stored all answers for Day ${day + 1}, Card ${card + 1}`);
   }
 
   res.status(200).json({
@@ -86,7 +72,7 @@ export default async function handler(req, res) {
    totalPlayers: players.length,
    answeredCount: answeredCount,
    phase: gameState.phase,
-   message: allAnswered ? 'All players have answered!' : `Waiting for partner... (${answeredCount}/2)`
+   message: allAnswered ? 'All players have answered!' : `Waiting for partner... (${answeredCount}/${players.length})`
   });
 
  } catch (error) {
