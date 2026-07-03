@@ -3,6 +3,8 @@ import { kv } from '@vercel/kv';
 export default async function handler(req, res) {
   const { room, playerId } = req.query;
 
+  console.log('📊 Game state request:', { room, playerId });
+
   if (!room || !playerId) {
     return res.status(400).json({ error: 'Missing room or playerId' });
   }
@@ -12,14 +14,18 @@ export default async function handler(req, res) {
     const gameState = await kv.get(`game:${room}`);
 
     if (!gameState) {
+      console.log(`❌ Room ${room} not found in KV`);
       return res.status(200).json({
         phase: 'not_found',
         error: 'Room not found'
       });
     }
 
-    // Get players
+    console.log(`✅ Room ${room} found:`, gameState);
+
+    // Get players from room
     const players = await kv.lrange(`room:${room}:players`, 0, -1) || [];
+    console.log(`👥 Players in ${room}:`, players);
 
     // Get player names
     const playerNames = {};
@@ -28,11 +34,12 @@ export default async function handler(req, res) {
       if (name) playerNames[pid] = name;
     }
 
+    // Check if partner is connected
     const partnerId = players.find(id => id !== playerId);
     const partnerConnected = !!partnerId;
     const partnerName = partnerId ? playerNames[partnerId] : null;
 
-    // Get answers
+    // Get answers for current card
     let answers = {};
     let allAnswered = false;
 
@@ -50,6 +57,7 @@ export default async function handler(req, res) {
         }
       }
 
+      // Check if all players have answered
       if (players.length > 0) {
         let answeredCount = 0;
         for (const p of players) {
@@ -59,12 +67,14 @@ export default async function handler(req, res) {
       }
     }
 
+    // Auto-transition to reveal if all answered
     if (gameState.phase === 'playing' && allAnswered) {
       gameState.phase = 'reveal';
       await kv.set(`game:${room}`, gameState);
+      console.log(`🔄 Room ${room} transitioned to reveal phase`);
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       phase: gameState.phase || 'waiting',
       currentDay: gameState.currentDay || 0,
       currentCard: gameState.currentCard || 0,
@@ -80,7 +90,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error getting game state:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Failed to get game state',
       details: error.message
     });
