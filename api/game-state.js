@@ -1,4 +1,22 @@
 import { kv } from '@vercel/kv';
+import fs from 'fs';
+import path from 'path';
+
+// Helper function to get total cards for a day
+function getTotalCardsForDay(dayIndex) {
+  try {
+    const questionsPath = path.join(process.cwd(), 'public', 'questions.json');
+    if (fs.existsSync(questionsPath)) {
+      const data = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
+      if (data.days && data.days[dayIndex]) {
+        return data.days[dayIndex].cards.length;
+      }
+    }
+  } catch (error) {
+    console.error('Error reading questions.json:', error);
+  }
+  return 4;
+}
 
 export default async function handler(req, res) {
   const { room, playerId } = req.query;
@@ -22,33 +40,7 @@ export default async function handler(req, res) {
 
     // Get players from room
     let players = await kv.lrange(`room:${room}:players`, 0, -1) || [];
-
-    // ============ STRICT 2-PLAYER ENFORCEMENT ============
-    // Remove duplicates
     players = [...new Set(players)];
-
-    // Only keep players that have a name (active players)
-    const activePlayers = [];
-    for (const p of players) {
-      const name = await kv.get(`player:${p}:name`);
-      if (name) {
-        activePlayers.push(p);
-      }
-    }
-
-    // If active players is different, update the room
-    if (activePlayers.length !== players.length) {
-      console.log(`🧹 Game-state cleanup: ${players.length} -> ${activePlayers.length}`);
-      await kv.del(`room:${room}:players`);
-      for (const p of activePlayers) {
-        await kv.rpush(`room:${room}:players`, p);
-      }
-      players = activePlayers;
-      gameState.players = players;
-      await kv.set(`game:${room}`, gameState);
-    }
-
-    console.log(`👥 Players in ${room}:`, players);
 
     // Get player names
     const playerNames = {};
@@ -83,7 +75,7 @@ export default async function handler(req, res) {
         for (const p of players) {
           if (answers[p]) answeredCount++;
         }
-        allAnswered = answeredCount === players.length && players.length === 2;
+        allAnswered = answeredCount === players.length && players.length > 0;
       }
     }
 
@@ -93,10 +85,14 @@ export default async function handler(req, res) {
       console.log(`🔄 Room ${room} transitioned to reveal phase`);
     }
 
+    // Get total cards for this day
+    const totalCards = getTotalCardsForDay(gameState.currentDay || 0);
+
     return res.status(200).json({
       phase: gameState.phase || 'waiting',
       currentDay: gameState.currentDay || 0,
       currentCard: gameState.currentCard || 0,
+      totalCards: totalCards,
       players: players,
       playerNames: playerNames,
       partnerConnected: partnerConnected,

@@ -1,4 +1,23 @@
 import { kv } from '@vercel/kv';
+import fs from 'fs';
+import path from 'path';
+
+// Helper function to get total cards for a day
+function getTotalCardsForDay(dayIndex) {
+ try {
+  // Read questions.json from public folder
+  const questionsPath = path.join(process.cwd(), 'public', 'questions.json');
+  if (fs.existsSync(questionsPath)) {
+   const data = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
+   if (data.days && data.days[dayIndex]) {
+    return data.days[dayIndex].cards.length;
+   }
+  }
+ } catch (error) {
+  console.error('Error reading questions.json:', error);
+ }
+ return 4; // Default fallback
+}
 
 export default async function handler(req, res) {
  if (req.method !== 'POST') {
@@ -17,17 +36,32 @@ export default async function handler(req, res) {
    return res.status(404).json({ error: 'Game not found' });
   }
 
+  // Get the current day and card
+  const currentDay = gameState.currentDay || 0;
+  const currentCard = gameState.currentCard || 0;
+
+  // Get total cards for this day from questions.json
+  const totalCards = getTotalCardsForDay(currentDay);
+
+  console.log(`📄 Day ${currentDay + 1}, Card ${currentCard + 1}/${totalCards}`);
+
+  // Move to next card
   gameState.phase = 'playing';
-  gameState.currentCard = (gameState.currentCard || 0) + 1;
+  gameState.currentCard = currentCard + 1;
 
-  const cardsPerDay = 5;
-  if (gameState.currentCard >= cardsPerDay) {
+  // Check if we've completed all cards for this day
+  if (gameState.currentCard >= totalCards) {
+   // Reset card to 0 and move to next day
    gameState.currentCard = 0;
-   gameState.currentDay = (gameState.currentDay || 0) + 1;
+   gameState.currentDay = currentDay + 1;
 
+   console.log(`📆 Moving to Day ${gameState.currentDay + 1}`);
+
+   // Check if game is complete (5 days)
    if (gameState.currentDay >= 5) {
     gameState.phase = 'complete';
     await kv.set(`game:${roomCode}`, gameState);
+    console.log(`🏁 Game complete in room ${roomCode}!`);
     return res.status(200).json({
      success: true,
      phase: 'complete',

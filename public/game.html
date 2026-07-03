@@ -525,6 +525,15 @@
         playTrack(musicKey);
         changeBackground("day" + (data.currentDay + 1));
         showCard();
+
+        // Update the day label to show correct count
+        const day = questions.days[currentDayIndex];
+        if (day) {
+          document.getElementById("dayLabel").textContent =
+            `Day ${day.dayNumber} — ${day.deckLabel}`;
+          document.getElementById("cardCounter").textContent =
+            `Card ${currentCardIndex + 1} of ${day.cards.length}`;
+        }
       }
 
       function showCard() {
@@ -541,8 +550,12 @@
         document.getElementById("dayLabel").textContent =
           `Day ${day.dayNumber} — ${day.deckLabel}`;
         document.getElementById("dayTitle").textContent = day.title;
+
+        // Show correct card count
+        const totalCards = day.cards.length;
         document.getElementById("cardCounter").textContent =
-          `Card ${card.cardNumber} of ${day.cards.length}`;
+          `Card ${card.cardNumber} of ${totalCards}`;
+
         document.getElementById("cardTitle").textContent = card.cardTitle;
         document.getElementById("cardQuestion").textContent = card.question;
 
