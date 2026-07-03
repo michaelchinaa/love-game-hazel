@@ -4,27 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Game Results</title>
+    <link rel="stylesheet" href="style.css" />
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: "Georgia", "Times New Roman", serif;
-        background: #1a1a2e;
-        color: #e0d5c1;
-        min-height: 100vh;
+      /* Results page specific styles */
+      .results-container {
+        max-width: 900px;
+        margin: 0 auto;
         padding: 20px;
       }
 
-      .container {
-        max-width: 900px;
-        margin: 0 auto;
-      }
-
-      .header {
+      .results-header {
         text-align: center;
         margin-bottom: 30px;
         padding: 30px;
@@ -33,13 +22,13 @@
         border: 1px solid rgba(212, 175, 55, 0.3);
       }
 
-      .header h1 {
+      .results-header h1 {
         color: #d4af37;
         font-size: 2.2em;
         text-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
       }
 
-      .header .subtitle {
+      .results-header .subtitle {
         color: #a09070;
         margin-top: 8px;
         font-style: italic;
@@ -183,6 +172,16 @@
         margin-right: 10px;
       }
 
+      .answer-item .player-badge {
+        display: inline-block;
+        background: rgba(100, 200, 255, 0.15);
+        color: #88ddff;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.75em;
+        margin-right: 10px;
+      }
+
       .answer-item .question {
         color: #c0b090;
         font-style: italic;
@@ -257,32 +256,32 @@
         }
       }
 
-      /* Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
+      .refresh-btn {
+        display: inline-block;
+        padding: 8px 16px;
+        background: rgba(212, 175, 55, 0.2);
+        color: #d4af37;
+        border: 1px solid rgba(212, 175, 55, 0.3);
+        border-radius: 8px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 14px;
+        transition: all 0.3s;
+        margin: 10px auto;
       }
-      ::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.3);
-      }
-      ::-webkit-scrollbar-thumb {
+
+      .refresh-btn:hover {
         background: rgba(212, 175, 55, 0.3);
-        border-radius: 4px;
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(212, 175, 55, 0.5);
+
+      .error-message {
+        text-align: center;
+        padding: 40px;
+        color: #ff6666;
       }
 
       /* Responsive */
       @media (max-width: 768px) {
-        .header h1 {
-          font-size: 1.6em;
-        }
-        .stats-bar {
-          gap: 15px;
-        }
-        .stat-item {
-          padding: 8px 15px;
-        }
         .result-header {
           flex-direction: column;
         }
@@ -294,23 +293,48 @@
         .answer-item {
           padding: 10px;
         }
+        .stats-bar {
+          gap: 15px;
+        }
+        .stat-item {
+          padding: 8px 15px;
+        }
+        .results-header h1 {
+          font-size: 1.6em;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="container">
-      <div class="header">
+    <div class="results-container">
+      <div class="results-header">
         <h1>📊 Game Results</h1>
         <p class="subtitle">View all completed game sessions</p>
       </div>
 
-      <input
-        type="text"
-        class="search-box"
-        id="searchInput"
-        placeholder="🔍 Search by Room Code..."
-        onkeyup="filterResults()"
-      />
+      <div
+        style="
+          display: flex;
+          justify-content: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        "
+      >
+        <input
+          type="text"
+          class="search-box"
+          id="searchInput"
+          placeholder="🔍 Search by Room Code..."
+          onkeyup="filterResults()"
+          style="margin: 0 auto 10px"
+        />
+      </div>
+
+      <div style="text-align: center; margin-bottom: 15px">
+        <button class="refresh-btn" onclick="loadResults()">
+          🔄 Refresh Results
+        </button>
+      </div>
 
       <div class="stats-bar" id="statsBar">
         <div class="stat-item">
@@ -320,6 +344,10 @@
         <div class="stat-item">
           <span class="number" id="totalAnswers">0</span>
           <span class="label">Answers</span>
+        </div>
+        <div class="stat-item">
+          <span class="number" id="totalPlayers">0</span>
+          <span class="label">Players</span>
         </div>
       </div>
 
@@ -337,177 +365,219 @@
 
     <script>
       // ============ RESULTS PAGE SCRIPT ============
-      (function () {
-        "use strict";
+      let resultsData = [];
 
-        let resultsData = []; // Renamed from allResults to avoid conflict
+      async function loadResults() {
+        const container = document.getElementById("resultsContainer");
+        container.innerHTML = `
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading results...</p>
+        </div>
+      `;
 
-        async function loadResults() {
-          try {
-            const response = await fetch("/api/get-results");
-            const data = await response.json();
+        try {
+          console.log("🔍 Fetching results from /api/get-results");
+          const response = await fetch("/api/get-results");
 
-            if (data.success && data.results && data.results.length > 0) {
-              resultsData = data.results;
-              updateStats(resultsData);
-              displayResults(resultsData);
-            } else {
-              document.getElementById("resultsContainer").innerHTML = `
-                            <div class="no-results">
-                                <span class="icon">📭</span>
-                                <p>No results found yet.</p>
-                                <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
-                                    Complete a game to see results here.
-                                </p>
-                            </div>
-                        `;
-              document.getElementById("statsBar").style.display = "none";
-            }
-          } catch (error) {
-            console.error("Error loading results:", error);
-            document.getElementById("resultsContainer").innerHTML = `
-                        <div class="no-results">
-                            <span class="icon">⚠️</span>
-                            <p>Error loading results.</p>
-                            <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
-                                ${error.message}
-                            </p>
-                        </div>
-                    `;
-          }
-        }
-
-        function updateStats(results) {
-          const totalGames = results.length;
-          const totalAnswers = results.reduce(
-            (sum, r) => sum + (r.totalCards || r.answers?.length || 0),
-            0,
-          );
-
-          document.getElementById("totalGames").textContent = totalGames;
-          document.getElementById("totalAnswers").textContent = totalAnswers;
-          document.getElementById("statsBar").style.display = "flex";
-        }
-
-        function displayResults(results) {
-          const container = document.getElementById("resultsContainer");
-
-          if (results.length === 0) {
-            container.innerHTML = `
-                        <div class="no-results">
-                            <span class="icon">🔍</span>
-                            <p>No results match your search.</p>
-                        </div>
-                    `;
-            return;
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
 
-          container.innerHTML = results
-            .map((result, index) => {
-              const answers = result.answers || [];
-              const totalCards = result.totalCards || answers.length;
-              const player1 = result.player1 || "Player 1";
-              const player2 = result.player2 || "Partner";
+          const data = await response.json();
+          console.log("📊 Results data:", data);
 
-              return `
-                        <div class="result-card" data-room="${result.roomCode}">
-                            <div class="result-header">
-                                <div>
-                                    <span class="room">🎮 Room: ${result.roomCode}</span>
-                                </div>
-                                <div class="meta">
-                                    <span class="players">👤 ${player1} & ${player2}</span>
-                                    <span>📅 ${formatDate(result.completedAt || result.savedAt || result.timestamp)}</span>
-                                    <span>📝 ${totalCards} cards</span>
-                                </div>
-                            </div>
-                            <div class="answers-list">
-                                ${answers
-                                  .map(
-                                    (answer) => `
-                                    <div class="answer-item">
-                                        <span class="day-badge">Day ${answer.day}</span>
-                                        <span style="color: #6a6050; font-size: 0.85em;">Card ${answer.cardNumber}: ${answer.cardTitle || ""}</span>
-                                        <div class="question">${answer.question}</div>
-                                        <div class="choice">
-                                            <span class="letter">${answer.choice})</span> ${answer.choiceText || answer.choice}
-                                        </div>
-                                        ${answer.customText ? `<div class="custom-text">💬 "${answer.customText}"</div>` : ""}
-                                    </div>
-                                `,
-                                  )
-                                  .join("")}
-                            </div>
-                        </div>
-                    `;
-            })
-            .join("");
-        }
-
-        function filterResults() {
-          const search = document
-            .getElementById("searchInput")
-            .value.toUpperCase()
-            .trim();
-          const cards = document.querySelectorAll(".result-card");
-          let visibleCount = 0;
-
-          cards.forEach((card) => {
-            const room = card.getAttribute("data-room").toUpperCase();
-            if (room.includes(search)) {
-              card.style.display = "block";
-              visibleCount++;
-            } else {
-              card.style.display = "none";
-            }
-          });
-
-          // Show message if no results found
-          const container = document.getElementById("resultsContainer");
-          const existingNoResults = container.querySelector(".no-results");
-
-          if (visibleCount === 0 && search !== "") {
-            if (!existingNoResults) {
-              const noResults = document.createElement("div");
-              noResults.className = "no-results";
-              noResults.innerHTML = `
-                            <span class="icon">🔍</span>
-                            <p>No results match "${search}"</p>
-                        `;
-              container.appendChild(noResults);
-            }
+          if (data.success && data.results && data.results.length > 0) {
+            resultsData = data.results;
+            updateStats(resultsData);
+            displayResults(resultsData);
           } else {
-            if (existingNoResults) {
-              existingNoResults.remove();
-            }
+            container.innerHTML = `
+            <div class="no-results">
+              <span class="icon">📭</span>
+              <p>No results found yet.</p>
+              <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
+                Complete a game to see results here.
+              </p>
+              <button class="refresh-btn" onclick="loadResults()" style="margin-top: 15px;">
+                🔄 Refresh
+              </button>
+            </div>
+          `;
+            document.getElementById("statsBar").style.display = "none";
           }
+        } catch (error) {
+          console.error("❌ Error loading results:", error);
+          container.innerHTML = `
+          <div class="error-message">
+            <span class="icon" style="font-size: 3em; display: block; margin-bottom: 15px;">⚠️</span>
+            <p>Error loading results.</p>
+            <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
+              ${error.message}
+            </p>
+            <button class="refresh-btn" onclick="loadResults()" style="margin-top: 15px;">
+              🔄 Retry
+            </button>
+          </div>
+        `;
+          document.getElementById("statsBar").style.display = "none";
+        }
+      }
+
+      function updateStats(results) {
+        const totalGames = results.length;
+        let totalAnswers = 0;
+        let uniquePlayers = new Set();
+
+        results.forEach((result) => {
+          const answers = result.answers || [];
+          totalAnswers += answers.length;
+          if (result.player1) uniquePlayers.add(result.player1);
+          if (result.player2) uniquePlayers.add(result.player2);
+        });
+
+        document.getElementById("totalGames").textContent = totalGames;
+        document.getElementById("totalAnswers").textContent = totalAnswers;
+        document.getElementById("totalPlayers").textContent =
+          uniquePlayers.size;
+        document.getElementById("statsBar").style.display = "flex";
+      }
+
+      function displayResults(results) {
+        const container = document.getElementById("resultsContainer");
+
+        if (results.length === 0) {
+          container.innerHTML = `
+          <div class="no-results">
+            <span class="icon">🔍</span>
+            <p>No results match your search.</p>
+          </div>
+        `;
+          return;
         }
 
-        function formatDate(dateString) {
-          if (!dateString) return "Unknown";
-          try {
-            const date = new Date(dateString);
-            return date.toLocaleString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-          } catch {
-            return dateString;
+        container.innerHTML = results
+          .map((result, index) => {
+            const answers = result.answers || [];
+            const totalCards = result.totalCards || answers.length;
+            const player1 = result.player1 || "Player 1";
+            const player2 = result.player2 || "Partner";
+            const savedAt =
+              result.savedAt ||
+              result.completedAt ||
+              result.timestamp ||
+              new Date().toISOString();
+
+            return `
+          <div class="result-card" data-room="${result.roomCode || "Unknown"}">
+            <div class="result-header">
+              <div>
+                <span class="room">🎮 Room: ${result.roomCode || "Unknown"}</span>
+              </div>
+              <div class="meta">
+                <span class="players">👤 ${player1} & ${player2}</span>
+                <span>📅 ${formatDate(savedAt)}</span>
+                <span>📝 ${totalCards} cards</span>
+              </div>
+            </div>
+            <div class="answers-list">
+              ${answers
+                .map(
+                  (answer) => `
+                <div class="answer-item">
+                  <span class="day-badge">Day ${answer.day || "?"}</span>
+                  <span class="player-badge">${answer.playerName || answer.playerId || "Player"}</span>
+                  <span style="color: #6a6050; font-size: 0.85em;">Card ${answer.cardNumber || "?"}: ${answer.cardTitle || ""}</span>
+                  <div class="question">${answer.question || "No question"}</div>
+                  <div class="choice">
+                    <span class="letter">${answer.choice || "?"})</span> ${answer.choiceText || answer.choice || "No answer"}
+                  </div>
+                  ${answer.customText ? `<div class="custom-text">💬 "${answer.customText}"</div>` : ""}
+                </div>
+              `,
+                )
+                .join("")}
+            </div>
+          </div>
+        `;
+          })
+          .join("");
+      }
+
+      function filterResults() {
+        const search = document
+          .getElementById("searchInput")
+          .value.toUpperCase()
+          .trim();
+        const cards = document.querySelectorAll(".result-card");
+        let visibleCount = 0;
+
+        cards.forEach((card) => {
+          const room = card.getAttribute("data-room").toUpperCase();
+          if (room.includes(search)) {
+            card.style.display = "block";
+            visibleCount++;
+          } else {
+            card.style.display = "none";
+          }
+        });
+
+        // Show message if no results found
+        const container = document.getElementById("resultsContainer");
+        const existingNoResults = container.querySelector(".no-results");
+
+        if (visibleCount === 0 && search !== "") {
+          if (!existingNoResults) {
+            const noResults = document.createElement("div");
+            noResults.className = "no-results";
+            noResults.innerHTML = `
+            <span class="icon">🔍</span>
+            <p>No results match "${search}"</p>
+          `;
+            container.appendChild(noResults);
+          }
+        } else {
+          if (existingNoResults) {
+            existingNoResults.remove();
           }
         }
+      }
 
-        // Load results on page load
-        document.addEventListener("DOMContentLoaded", loadResults);
+      function formatDate(dateString) {
+        if (!dateString) return "Unknown";
+        try {
+          const date = new Date(dateString);
+          if (isNaN(date.getTime())) return "Invalid Date";
+          return date.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        } catch {
+          return dateString;
+        }
+      }
 
-        // Refresh every 30 seconds
-        setInterval(loadResults, 30000);
+      // Make functions globally accessible
+      window.loadResults = loadResults;
+      window.filterResults = filterResults;
 
-        // Make filterResults globally accessible for the search input
-        window.filterResults = filterResults;
-      })();
+      // Load results on page load
+      document.addEventListener("DOMContentLoaded", loadResults);
+
+      // Auto-refresh every 30 seconds
+      let refreshInterval = setInterval(loadResults, 30000);
+
+      // Clear interval when page is hidden
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) {
+          clearInterval(refreshInterval);
+        } else {
+          refreshInterval = setInterval(loadResults, 30000);
+        }
+      });
     </script>
   </body>
 </html>
