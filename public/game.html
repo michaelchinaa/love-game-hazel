@@ -413,7 +413,9 @@
       // ============ START POLLING ============
       function startPolling() {
         pollingInterval = setInterval(async () => {
+          // Skip polling if video is playing
           if (isVideoPlaying || isCompleteProcessing) {
+            console.log("⏸️ Polling paused - video playing");
             return;
           }
 
@@ -460,15 +462,20 @@
                 data.currentCard !== currentCardIndex;
 
               if (cardChanged) {
+                // If we're moving to a new day, play video
                 if (
                   data.currentDay !== currentDayIndex &&
                   currentDayIndex >= 0
                 ) {
                   const dayToPlay = currentDayIndex + 1;
-                  if (dayToPlay >= 1 && dayToPlay <= 4) {
+                  if (dayToPlay >= 1 && dayToPlay <= 5) {
                     isVideoPlaying = true;
                     playDayVideo(dayToPlay, function () {
                       isVideoPlaying = false;
+                      // Reset the card state
+                      hasSubmitted = false;
+                      selectedOption = null;
+                      isCardLocked = false;
                       continueToDay(data);
                     });
                     return;
@@ -476,6 +483,7 @@
                 }
                 continueToDay(data);
               } else {
+                // Same card - check answer status
                 if (data.answers && data.answers[playerId]) {
                   document.getElementById("submitBtn").classList.add("hidden");
                   document
@@ -867,9 +875,10 @@
             video.play().catch(() => {});
           });
 
+        // ============ CRITICAL: Remove the auto-close on ended ============
+        // Let user click the button to continue
         video.onended = null;
       }
-
       function closeVideo() {
         console.log("🔚 Closing video overlay");
 
@@ -895,13 +904,13 @@
             });
         }
 
+        // ============ CRITICAL: Call the callback to resume polling ============
         if (videoCallback) {
           const callback = videoCallback;
           videoCallback = null;
           callback();
         }
       }
-
       document
         .getElementById("dayVideo")
         .addEventListener("ended", function () {

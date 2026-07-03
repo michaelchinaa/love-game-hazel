@@ -2,7 +2,6 @@ import { kv } from '@vercel/kv';
 import fs from 'fs';
 import path from 'path';
 
-// Helper function to get total cards for a day
 function getTotalCardsForDay(dayIndex) {
   try {
     const questionsPath = path.join(process.cwd(), 'public', 'questions.json');
@@ -70,22 +69,23 @@ export default async function handler(req, res) {
         }
       }
 
-      if (players.length > 0) {
+      // Only check if all answered if there are exactly 2 players
+      if (players.length === 2) {
         let answeredCount = 0;
         for (const p of players) {
           if (answers[p]) answeredCount++;
         }
-        allAnswered = answeredCount === players.length && players.length > 0;
+        allAnswered = answeredCount === players.length;
       }
     }
 
-    if (gameState.phase === 'playing' && allAnswered) {
+    // Only auto-transition to reveal if all answered AND phase is playing
+    if (gameState.phase === 'playing' && allAnswered && players.length === 2) {
       gameState.phase = 'reveal';
       await kv.set(`game:${room}`, gameState);
       console.log(`🔄 Room ${room} transitioned to reveal phase`);
     }
 
-    // Get total cards for this day
     const totalCards = getTotalCardsForDay(gameState.currentDay || 0);
 
     return res.status(200).json({
