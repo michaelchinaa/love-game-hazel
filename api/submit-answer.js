@@ -36,9 +36,34 @@ export default async function handler(req, res) {
    [playerId]: answerData
   });
 
-  const players = await kv.lrange(`room:${roomCode}:players`, 0, -1) || [];
+  // Get all players in the room
+  let players = await kv.lrange(`room:${roomCode}:players`, 0, -1) || [];
+
+  // ============ STRICT 2-PLAYER ENFORCEMENT ============
+  // Remove duplicates and only keep active players
+  players = [...new Set(players)];
+
+  // Clean stale players
+  const activePlayers = [];
+  for (const p of players) {
+   const name = await kv.get(`player:${p}:name`);
+   if (name) activePlayers.push(p);
+  }
+
+  if (activePlayers.length !== players.length) {
+   await kv.del(`room:${roomCode}:players`);
+   for (const p of activePlayers) {
+    await kv.rpush(`room:${roomCode}:players`, p);
+   }
+   players = activePlayers;
+   gameState.players = players;
+   await kv.set(`game:${roomCode}`, gameState);
+  }
+
+  // Get all answers for this card
   const answers = await kv.hgetall(answersKey);
 
+  // Check if ALL players have answered (should be exactly 2)
   let allAnswered = true;
   let answeredCount = 0;
   for (const player of players) {
@@ -49,7 +74,8 @@ export default async function handler(req, res) {
    }
   }
 
-  if (allAnswered && players.length >= 2) {
+  // If all 2 players answered, move to reveal phase
+  if (allAnswered && players.length === 2) {
    gameState.phase = 'reveal';
    await kv.set(`game:${roomCode}`, gameState);
   }
@@ -60,7 +86,7 @@ export default async function handler(req, res) {
    totalPlayers: players.length,
    answeredCount: answeredCount,
    phase: gameState.phase,
-   message: allAnswered ? 'All players have answered!' : `Waiting for partner... (${answeredCount}/${players.length})`
+   message: allAnswered ? 'All players have answered!' : `Waiting for partner... (${answeredCount}/2)`
   });
 
  } catch (error) {

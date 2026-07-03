@@ -504,7 +504,29 @@ app.get('/api/get-results', (req, res) => {
   res.status(500).json({ error: 'Failed to get results' });
  }
 });
+async function fixRoom() {
+ if (!confirm('This will clean up the room to exactly 2 players. Continue?')) return;
 
+ try {
+  const response = await fetch('/api/cleanup-room', {
+   method: 'POST',
+   headers: { 'Content-Type': 'application/json' },
+   body: JSON.stringify({ roomCode: roomCode })
+  });
+  const data = await response.json();
+  console.log('Fix room response:', data);
+
+  if (data.success) {
+   alert(`✅ Room fixed! ${data.players.length} players active. Refreshing...`);
+   window.location.reload();
+  } else {
+   alert('❌ Failed to fix room: ' + (data.error || 'Unknown error'));
+  }
+ } catch (error) {
+  console.error('Error fixing room:', error);
+  alert('❌ Error fixing room: ' + error.message);
+ }
+}
 // ============ START SERVER ============
 app.listen(PORT, () => {
  console.log(`\n🚀 Server running at http://localhost:${PORT}`);

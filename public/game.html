@@ -820,7 +820,13 @@
           bgMusic.pause();
           console.log("🔇 Background music paused for video");
         }
-
+        <button
+          class="btn"
+          onclick="fixRoom()"
+          style="margin-top:15px; background:#ff6b6b; color:white; text-transform:none;"
+        >
+          🔧 Fix Room (if stuck)
+        </button>;
         if (bgVideo) {
           bgVideo.pause();
         }
