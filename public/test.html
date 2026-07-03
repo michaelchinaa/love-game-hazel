@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test API</title>
+</head>
+<body>
+    <h1>API Test</h1>
+    <div id="output"></div>
+
+    <script>
+        const roomCode = 'TEST123';
+        const playerId = 'player_' + Date.now();
+        
+        async function testAPI() {
+            const output = document.getElementById('output');
+            
+            // 1. Join room
+            output.innerHTML += '<br>1. Joining room...';
+            const readyRes = await fetch('/api/ready', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    roomCode,
+                    playerId,
+                    playerName: 'Test Player'
+                })
+            });
+            const readyData = await readyRes.json();
+            output.innerHTML += `<br>✅ Ready: ${JSON.stringify(readyData)}`;
+            
+            // 2. Get game state
+            output.innerHTML += '<br><br>2. Getting game state...';
+            const stateRes = await fetch(`/api/game-state?room=${roomCode}&playerId=${playerId}`);
+            const stateData = await stateRes.json();
+            output.innerHTML += `<br>✅ State: ${JSON.stringify(stateData)}`;
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

@@ -343,8 +343,12 @@
       let isVideoPlaying = false;
       let isCompleteProcessing = false;
       let isCardLocked = false;
+
+      // ============ STORE ALL ANSWERS FOR RESULTS ============
       let allAnswers = [];
       let partnerName = "Partner";
+      let resultsSaved = false; // Prevent duplicate saves
+      let gameCompleteAnswers = []; // Store all answers for the game
 
       // ============ LOAD QUESTIONS ============
       async function loadQuestions() {
@@ -413,9 +417,7 @@
       // ============ START POLLING ============
       function startPolling() {
         pollingInterval = setInterval(async () => {
-          // Skip polling if video is playing
           if (isVideoPlaying || isCompleteProcessing) {
-            console.log("⏸️ Polling paused - video playing");
             return;
           }
 
@@ -438,6 +440,9 @@
             if (data.partnerConnected) {
               dot.className = "status-dot connected";
               text.textContent = `Partner connected: ${data.partnerName || "Partner"}`;
+              if (data.partnerName) {
+                partnerName = data.partnerName;
+              }
             } else {
               dot.className = "status-dot disconnected";
               text.textContent = "Waiting for partner...";
@@ -462,17 +467,16 @@
                 data.currentCard !== currentCardIndex;
 
               if (cardChanged) {
-                // If we're moving to a new day, play video
                 if (
                   data.currentDay !== currentDayIndex &&
                   currentDayIndex >= 0
                 ) {
                   const dayToPlay = currentDayIndex + 1;
-                  if (dayToPlay >= 1 && dayToPlay <= 5) {
+                  if (dayToPlay >= 1 && dayToPlay <= 4) {
                     isVideoPlaying = true;
                     playDayVideo(dayToPlay, function () {
                       isVideoPlaying = false;
-                      // Reset the card state
+                      // Reset answer tracking for new day
                       hasSubmitted = false;
                       selectedOption = null;
                       isCardLocked = false;
@@ -483,7 +487,6 @@
                 }
                 continueToDay(data);
               } else {
-                // Same card - check answer status
                 if (data.answers && data.answers[playerId]) {
                   document.getElementById("submitBtn").classList.add("hidden");
                   document
@@ -501,6 +504,15 @@
                 }
               }
             } else if (data.phase === "reveal") {
+              // Store the answers from reveal for results
+              if (data.answers) {
+                const partnerAnswer = Object.values(data.answers).find(
+                  (a) => a.playerId !== playerId,
+                );
+                if (partnerAnswer) {
+                  partnerName = partnerAnswer.playerName || partnerName;
+                }
+              }
               showReveal(data.answers);
             } else if (data.phase === "complete") {
               if (!isCompleteProcessing && !isVideoPlaying) {
@@ -528,20 +540,12 @@
         currentCardIndex = data.currentCard;
         hasSubmitted = false;
         selectedOption = null;
+        isCardLocked = false;
 
         const musicKey = "day" + (data.currentDay + 1);
         playTrack(musicKey);
         changeBackground("day" + (data.currentDay + 1));
         showCard();
-
-        // Update the day label to show correct count
-        const day = questions.days[currentDayIndex];
-        if (day) {
-          document.getElementById("dayLabel").textContent =
-            `Day ${day.dayNumber} — ${day.deckLabel}`;
-          document.getElementById("cardCounter").textContent =
-            `Card ${currentCardIndex + 1} of ${day.cards.length}`;
-        }
       }
 
       function showCard() {
@@ -558,12 +562,8 @@
         document.getElementById("dayLabel").textContent =
           `Day ${day.dayNumber} — ${day.deckLabel}`;
         document.getElementById("dayTitle").textContent = day.title;
-
-        // Show correct card count
-        const totalCards = day.cards.length;
         document.getElementById("cardCounter").textContent =
-          `Card ${card.cardNumber} of ${totalCards}`;
-
+          `Card ${card.cardNumber} of ${day.cards.length}`;
         document.getElementById("cardTitle").textContent = card.cardTitle;
         document.getElementById("cardQuestion").textContent = card.question;
 
@@ -619,6 +619,7 @@
         }
       }
 
+      // ============ SUBMIT ANSWER ============
       async function submitAnswer() {
         if (!selectedOption || hasSubmitted) return;
         if (isCardLocked) return;
@@ -637,11 +638,12 @@
             ? document.getElementById("customAnswer").value.trim()
             : null;
 
+        // ============ STORE ANSWER FOR RESULTS ============
         const day = questions.days[currentDayIndex];
         const card = day.cards[currentCardIndex];
         const optionText = card.options[selectedOption] || "Custom Answer";
 
-        allAnswers.push({
+        const answerData = {
           day: currentDayIndex + 1,
           dayTitle: day.title,
           cardNumber: card.cardNumber,
@@ -653,7 +655,15 @@
           playerId: playerId,
           playerName: playerName,
           timestamp: new Date().toISOString(),
-        });
+        };
+
+        // Store locally
+        allAnswers.push(answerData);
+
+        // Store in game answers
+        gameCompleteAnswers.push(answerData);
+
+        console.log("📝 Answer stored:", answerData);
 
         try {
           const response = await fetch("/api/submit-answer", {
@@ -673,6 +683,7 @@
         }
       }
 
+      // ============ SHOW REVEAL ============
       function showReveal(answers) {
         if (!answers) return;
         document.getElementById("cardArea").classList.add("hidden");
@@ -681,6 +692,11 @@
         const myAnswer = answers[playerId];
         const partnerId = Object.keys(answers).find((id) => id !== playerId);
         const partnerAnswer = partnerId ? answers[partnerId] : null;
+
+        // Store partner's answer for results
+        if (partnerAnswer) {
+          partnerName = partnerAnswer.playerName || partnerName;
+        }
 
         const day = questions.days[currentDayIndex];
         const card = day ? day.cards[currentCardIndex] : null;
@@ -726,6 +742,7 @@
         document.getElementById("nextBtn").textContent = "Next Card →";
       }
 
+      // ============ NEXT CARD ============
       async function nextCard() {
         try {
           const response = await fetch("/api/next-card", {
@@ -740,46 +757,89 @@
         }
       }
 
-      // ============ SHOW COMPLETE WITH RESULTS SAVING ============
-      let resultsSaved = false; // Prevent duplicate saves
-
+      // ============ SHOW COMPLETE ============
       function showComplete() {
         clearInterval(pollingInterval);
         document.getElementById("cardArea").classList.add("hidden");
         document.getElementById("revealArea").classList.add("hidden");
         document.getElementById("completeArea").classList.remove("hidden");
 
-        // Save results to server - only once
+        // Save results - only once
         if (!resultsSaved) {
           resultsSaved = true;
           saveResults();
         }
       }
+
+      // ============ SAVE RESULTS ============
       async function saveResults() {
         try {
-          // ============ CRITICAL: Get ALL answers from the game ============
-          // We need to fetch the complete answers from the server
-          const response = await fetch(`/api/get-answers?roomCode=${roomCode}`);
-          const data = await response.json();
+          console.log("📊 All answers stored:", allAnswers);
+          console.log("📊 Partner name:", partnerName);
 
-          const allAnswersData = data.answers || [];
+          // Get the complete answers including partner's
+          // We'll fetch the final game state to get all answers
+          const stateRes = await fetch(
+            `/api/game-state?room=${roomCode}&playerId=${playerId}`,
+          );
+          const stateData = await stateRes.json();
 
-          // Get player names
-          const players = await fetch(`/api/get-players?roomCode=${roomCode}`);
-          const playersData = await players.json();
+          // Combine local answers with any from the server
+          const allGameAnswers = [...gameCompleteAnswers];
+
+          // Try to get partner answers from the reveal data
+          if (stateData.answers) {
+            const partnerId = Object.keys(stateData.answers).find(
+              (id) => id !== playerId,
+            );
+            if (partnerId && stateData.answers[partnerId]) {
+              const partnerAns = stateData.answers[partnerId];
+              const day = questions.days[currentDayIndex];
+              const card = day ? day.cards[currentCardIndex] : null;
+
+              if (card) {
+                // Add partner's last answer if not already in the list
+                const partnerExists = allGameAnswers.some(
+                  (a) =>
+                    a.playerId === partnerId &&
+                    a.cardNumber === card.cardNumber &&
+                    a.day === currentDayIndex + 1,
+                );
+
+                if (!partnerExists) {
+                  allGameAnswers.push({
+                    day: currentDayIndex + 1,
+                    dayTitle: day.title,
+                    cardNumber: card.cardNumber,
+                    cardTitle: card.cardTitle,
+                    question: card.question,
+                    choice: partnerAns.choice,
+                    choiceText:
+                      card.options[partnerAns.choice] || "Custom Answer",
+                    customText: partnerAns.customText || null,
+                    playerId: partnerId,
+                    playerName: stateData.playerNames
+                      ? stateData.playerNames[partnerId]
+                      : "Partner",
+                    timestamp: new Date().toISOString(),
+                  });
+                }
+              }
+            }
+          }
 
           const results = {
             player1: playerName,
-            player2: partnerName,
+            player2: partnerName || "Partner",
             roomCode: roomCode,
-            answers: allAnswersData,
-            totalCards: allAnswersData.length,
+            answers: allGameAnswers,
+            totalCards: allGameAnswers.length,
             completedAt: new Date().toISOString(),
           };
 
-          console.log("📊 Saving results:", results);
+          console.log("📊 Final results to save:", results);
 
-          const saveResponse = await fetch("/api/save-results", {
+          const response = await fetch("/api/save-results", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -790,8 +850,8 @@
             }),
           });
 
-          const saveData = await saveResponse.json();
-          console.log("✅ Results saved:", saveData);
+          const data = await response.json();
+          console.log("✅ Results saved:", data);
         } catch (error) {
           console.error("❌ Error saving results:", error);
         }
@@ -895,10 +955,9 @@
             video.play().catch(() => {});
           });
 
-        // ============ CRITICAL: Remove the auto-close on ended ============
-        // Let user click the button to continue
         video.onended = null;
       }
+
       function closeVideo() {
         console.log("🔚 Closing video overlay");
 
@@ -924,13 +983,13 @@
             });
         }
 
-        // ============ CRITICAL: Call the callback to resume polling ============
         if (videoCallback) {
           const callback = videoCallback;
           videoCallback = null;
           callback();
         }
       }
+
       document
         .getElementById("dayVideo")
         .addEventListener("ended", function () {
