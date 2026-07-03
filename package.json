@@ -1,13 +1,15 @@
 {
-  "name": "card-game",
+  "name": "card-game-vercel",
   "version": "1.0.0",
-  "description": "A card game for two players",
+  "description": "Card Game for Couples",
+  "main": "server.js",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "node lib/build-questions.js"
   },
   "dependencies": {
-    "@upstash/redis": "^1.38.0",
-    "@vercel/kv": "^3.0.0"
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
   }
 }

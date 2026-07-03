@@ -18,11 +18,16 @@ export default async function handler(req, res) {
    return res.status(404).json({ error: 'Game not found' });
   }
 
-  const day = gameState.currentDay;
-  const card = gameState.currentCard;
+  // Check if in playing phase
+  if (gameState.phase !== 'playing') {
+   return res.status(400).json({ error: 'Game is not in playing phase' });
+  }
 
-  // Store the answer with a timestamp
+  const day = gameState.currentDay || 0;
+  const card = gameState.currentCard || 0;
   const answersKey = `room:${roomCode}:day:${day}:card:${card}:answers`;
+
+  // Store the answer
   const answerData = JSON.stringify({
    choice,
    customText,
@@ -35,26 +40,28 @@ export default async function handler(req, res) {
   });
 
   // Get all players in the room
-  const players = await kv.lrange(`room:${roomCode}:players`, 0, -1);
+  const players = await kv.lrange(`room:${roomCode}:players`, 0, -1) || [];
 
   // Get all answers for this card
   const answers = await kv.hgetall(answersKey);
 
   // Check if ALL players have answered
   let allAnswered = true;
+  let answeredCount = 0;
   for (const player of players) {
-   if (!answers[player]) {
+   if (answers[player]) {
+    answeredCount++;
+   } else {
     allAnswered = false;
-    break;
    }
   }
 
   // If all answered, move to reveal phase
-  if (allAnswered) {
+  if (allAnswered && players.length >= 2) {
    gameState.phase = 'reveal';
    await kv.set(`game:${roomCode}`, gameState);
 
-   // Also store the answers in a permanent location
+   // Store all answers for reveal
    const allAnswersKey = `room:${roomCode}:day:${day}:card:${card}:all_answers`;
    await kv.set(allAnswersKey, answers);
   }
@@ -63,8 +70,9 @@ export default async function handler(req, res) {
    success: true,
    allAnswered,
    totalPlayers: players.length,
-   answeredCount: Object.keys(answers).length,
-   message: allAnswered ? 'All players have answered!' : 'Waiting for partner...'
+   answeredCount: answeredCount,
+   phase: gameState.phase,
+   message: allAnswered ? 'All players have answered!' : `Waiting for partner... (${answeredCount}/${players.length})`
   });
 
  } catch (error) {

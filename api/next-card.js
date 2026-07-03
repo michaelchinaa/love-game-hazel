@@ -22,14 +22,13 @@ export default async function handler(req, res) {
   gameState.phase = 'playing';
 
   // Move to next card
-  gameState.currentCard += 1;
+  gameState.currentCard = (gameState.currentCard || 0) + 1;
 
   // Check if we need to move to next day
-  // You'll need to know the total cards per day
-  const cardsPerDay = 5; // Adjust this based on your actual cards per day
+  const cardsPerDay = 5; // Adjust based on your actual cards per day
   if (gameState.currentCard >= cardsPerDay) {
    gameState.currentCard = 0;
-   gameState.currentDay += 1;
+   gameState.currentDay = (gameState.currentDay || 0) + 1;
 
    // Check if game is complete (5 days)
    if (gameState.currentDay >= 5) {
@@ -45,9 +44,6 @@ export default async function handler(req, res) {
 
   // Save updated state
   await kv.set(`game:${roomCode}`, gameState);
-
-  // Clean up old answers for new card (optional)
-  // We'll keep them for debugging but frontend won't show them
 
   res.status(200).json({
    success: true,

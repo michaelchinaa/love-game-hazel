@@ -336,170 +336,178 @@
     </div>
 
     <script>
-      let allResults = [];
+      // ============ RESULTS PAGE SCRIPT ============
+      (function () {
+        "use strict";
 
-      async function loadResults() {
-        try {
-          const response = await fetch("/api/get-results");
-          const data = await response.json();
+        let resultsData = []; // Renamed from allResults to avoid conflict
 
-          if (data.success && data.results && data.results.length > 0) {
-            allResults = data.results;
-            updateStats(allResults);
-            displayResults(allResults);
-          } else {
+        async function loadResults() {
+          try {
+            const response = await fetch("/api/get-results");
+            const data = await response.json();
+
+            if (data.success && data.results && data.results.length > 0) {
+              resultsData = data.results;
+              updateStats(resultsData);
+              displayResults(resultsData);
+            } else {
+              document.getElementById("resultsContainer").innerHTML = `
+                            <div class="no-results">
+                                <span class="icon">📭</span>
+                                <p>No results found yet.</p>
+                                <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
+                                    Complete a game to see results here.
+                                </p>
+                            </div>
+                        `;
+              document.getElementById("statsBar").style.display = "none";
+            }
+          } catch (error) {
+            console.error("Error loading results:", error);
             document.getElementById("resultsContainer").innerHTML = `
                         <div class="no-results">
-                            <span class="icon">📭</span>
-                            <p>No results found yet.</p>
+                            <span class="icon">⚠️</span>
+                            <p>Error loading results.</p>
                             <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
-                                Complete a game to see results here.
+                                ${error.message}
                             </p>
                         </div>
                     `;
-            document.getElementById("statsBar").style.display = "none";
           }
-        } catch (error) {
-          console.error("Error loading results:", error);
-          document.getElementById("resultsContainer").innerHTML = `
-                    <div class="no-results">
-                        <span class="icon">⚠️</span>
-                        <p>Error loading results.</p>
-                        <p style="font-size: 0.9em; margin-top: 10px; color: #6a6050;">
-                            ${error.message}
-                        </p>
-                    </div>
-                `;
-        }
-      }
-
-      function updateStats(results) {
-        const totalGames = results.length;
-        const totalAnswers = results.reduce(
-          (sum, r) => sum + (r.totalCards || r.answers?.length || 0),
-          0,
-        );
-
-        document.getElementById("totalGames").textContent = totalGames;
-        document.getElementById("totalAnswers").textContent = totalAnswers;
-        document.getElementById("statsBar").style.display = "flex";
-      }
-
-      function displayResults(results) {
-        const container = document.getElementById("resultsContainer");
-
-        if (results.length === 0) {
-          container.innerHTML = `
-                    <div class="no-results">
-                        <span class="icon">🔍</span>
-                        <p>No results match your search.</p>
-                    </div>
-                `;
-          return;
         }
 
-        container.innerHTML = results
-          .map((result, index) => {
-            const answers = result.answers || [];
-            const totalCards = result.totalCards || answers.length;
-            const player1 = result.player1 || "Player 1";
-            const player2 = result.player2 || "Partner";
+        function updateStats(results) {
+          const totalGames = results.length;
+          const totalAnswers = results.reduce(
+            (sum, r) => sum + (r.totalCards || r.answers?.length || 0),
+            0,
+          );
 
-            return `
-                    <div class="result-card" data-room="${result.roomCode}">
-                        <div class="result-header">
-                            <div>
-                                <span class="room">🎮 Room: ${result.roomCode}</span>
-                            </div>
-                            <div class="meta">
-                                <span class="players">👤 ${player1} & ${player2}</span>
-                                <span>📅 ${formatDate(result.completedAt || result.timestamp || result.savedAt)}</span>
-                                <span>📝 ${totalCards} cards</span>
-                            </div>
+          document.getElementById("totalGames").textContent = totalGames;
+          document.getElementById("totalAnswers").textContent = totalAnswers;
+          document.getElementById("statsBar").style.display = "flex";
+        }
+
+        function displayResults(results) {
+          const container = document.getElementById("resultsContainer");
+
+          if (results.length === 0) {
+            container.innerHTML = `
+                        <div class="no-results">
+                            <span class="icon">🔍</span>
+                            <p>No results match your search.</p>
                         </div>
-                        <div class="answers-list">
-                            ${answers
-                              .map(
-                                (answer) => `
-                                <div class="answer-item">
-                                    <span class="day-badge">Day ${answer.day}</span>
-                                    <span style="color: #6a6050; font-size: 0.85em;">Card ${answer.cardNumber}: ${answer.cardTitle || ""}</span>
-                                    <div class="question">${answer.question}</div>
-                                    <div class="choice">
-                                        <span class="letter">${answer.choice})</span> ${answer.choiceText || answer.choice}
-                                    </div>
-                                    ${answer.customText ? `<div class="custom-text">💬 "${answer.customText}"</div>` : ""}
-                                </div>
-                            `,
-                              )
-                              .join("")}
-                        </div>
-                    </div>
-                `;
-          })
-          .join("");
-      }
-
-      function filterResults() {
-        const search = document
-          .getElementById("searchInput")
-          .value.toUpperCase()
-          .trim();
-        const cards = document.querySelectorAll(".result-card");
-        let visibleCount = 0;
-
-        cards.forEach((card) => {
-          const room = card.getAttribute("data-room").toUpperCase();
-          if (room.includes(search)) {
-            card.style.display = "block";
-            visibleCount++;
-          } else {
-            card.style.display = "none";
-          }
-        });
-
-        // Show message if no results found
-        const container = document.getElementById("resultsContainer");
-        const existingNoResults = container.querySelector(".no-results");
-
-        if (visibleCount === 0 && search !== "") {
-          if (!existingNoResults) {
-            const noResults = document.createElement("div");
-            noResults.className = "no-results";
-            noResults.innerHTML = `
-                        <span class="icon">🔍</span>
-                        <p>No results match "${search}"</p>
                     `;
-            container.appendChild(noResults);
+            return;
           }
-        } else {
-          if (existingNoResults) {
-            existingNoResults.remove();
-          }
-        }
-      }
 
-      function formatDate(dateString) {
-        if (!dateString) return "Unknown";
-        try {
-          const date = new Date(dateString);
-          return date.toLocaleString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
+          container.innerHTML = results
+            .map((result, index) => {
+              const answers = result.answers || [];
+              const totalCards = result.totalCards || answers.length;
+              const player1 = result.player1 || "Player 1";
+              const player2 = result.player2 || "Partner";
+
+              return `
+                        <div class="result-card" data-room="${result.roomCode}">
+                            <div class="result-header">
+                                <div>
+                                    <span class="room">🎮 Room: ${result.roomCode}</span>
+                                </div>
+                                <div class="meta">
+                                    <span class="players">👤 ${player1} & ${player2}</span>
+                                    <span>📅 ${formatDate(result.completedAt || result.savedAt || result.timestamp)}</span>
+                                    <span>📝 ${totalCards} cards</span>
+                                </div>
+                            </div>
+                            <div class="answers-list">
+                                ${answers
+                                  .map(
+                                    (answer) => `
+                                    <div class="answer-item">
+                                        <span class="day-badge">Day ${answer.day}</span>
+                                        <span style="color: #6a6050; font-size: 0.85em;">Card ${answer.cardNumber}: ${answer.cardTitle || ""}</span>
+                                        <div class="question">${answer.question}</div>
+                                        <div class="choice">
+                                            <span class="letter">${answer.choice})</span> ${answer.choiceText || answer.choice}
+                                        </div>
+                                        ${answer.customText ? `<div class="custom-text">💬 "${answer.customText}"</div>` : ""}
+                                    </div>
+                                `,
+                                  )
+                                  .join("")}
+                            </div>
+                        </div>
+                    `;
+            })
+            .join("");
+        }
+
+        function filterResults() {
+          const search = document
+            .getElementById("searchInput")
+            .value.toUpperCase()
+            .trim();
+          const cards = document.querySelectorAll(".result-card");
+          let visibleCount = 0;
+
+          cards.forEach((card) => {
+            const room = card.getAttribute("data-room").toUpperCase();
+            if (room.includes(search)) {
+              card.style.display = "block";
+              visibleCount++;
+            } else {
+              card.style.display = "none";
+            }
           });
-        } catch {
-          return dateString;
+
+          // Show message if no results found
+          const container = document.getElementById("resultsContainer");
+          const existingNoResults = container.querySelector(".no-results");
+
+          if (visibleCount === 0 && search !== "") {
+            if (!existingNoResults) {
+              const noResults = document.createElement("div");
+              noResults.className = "no-results";
+              noResults.innerHTML = `
+                            <span class="icon">🔍</span>
+                            <p>No results match "${search}"</p>
+                        `;
+              container.appendChild(noResults);
+            }
+          } else {
+            if (existingNoResults) {
+              existingNoResults.remove();
+            }
+          }
         }
-      }
 
-      // Load results on page load
-      document.addEventListener("DOMContentLoaded", loadResults);
+        function formatDate(dateString) {
+          if (!dateString) return "Unknown";
+          try {
+            const date = new Date(dateString);
+            return date.toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          } catch {
+            return dateString;
+          }
+        }
 
-      // Refresh every 30 seconds
-      setInterval(loadResults, 30000);
+        // Load results on page load
+        document.addEventListener("DOMContentLoaded", loadResults);
+
+        // Refresh every 30 seconds
+        setInterval(loadResults, 30000);
+
+        // Make filterResults globally accessible for the search input
+        window.filterResults = filterResults;
+      })();
     </script>
   </body>
 </html>

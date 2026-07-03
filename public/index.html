@@ -65,6 +65,10 @@
         color: #d4af37;
       }
 
+      .btn-secondary:hover {
+        background: rgba(212, 175, 55, 0.1);
+      }
+
       .input {
         width: 100%;
         padding: 15px;
@@ -75,6 +79,12 @@
         color: #e0d5c1;
         font-size: 16px;
         font-family: inherit;
+      }
+
+      .input:focus {
+        outline: none;
+        border-color: #d4af37;
+        box-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
       }
 
       .divider {
@@ -93,19 +103,23 @@
       .hidden {
         display: none;
       }
+
+      .status-text {
+        color: #a09070;
+        margin-top: 15px;
+        font-style: italic;
+      }
+
+      .error-text {
+        color: #ff6666;
+        margin-top: 10px;
+      }
     </style>
   </head>
   <body>
-    <!-- Video Background -->
-    <div class="video-background">
-      <video autoplay muted loop playsinline id="bgVideo">
-        <source src="/assets/videos/day1-salsa.mp4" type="video/mp4" />
-      </video>
-      <div class="bg-overlay"></div>
-    </div>
     <div class="container">
       <h1>🃏 Card Game</h1>
-
+      <a href="/results.html" class="btn btn-secondary">📊 View Results</a>
       <div id="mainMenu">
         <button class="btn btn-primary" onclick="createGame()">
           Create New Game
@@ -128,12 +142,16 @@
         <button class="btn btn-secondary" onclick="joinGame()">
           Join Game
         </button>
+        <div id="statusMessage" class="status-text"></div>
       </div>
 
       <div id="waitingRoom" class="hidden">
         <p>Your Room Code:</p>
         <div class="room-code" id="roomCodeDisplay"></div>
         <p>Waiting for partner to join...</p>
+        <div id="waitingStatus" class="status-text">
+          Checking for partner...
+        </div>
       </div>
     </div>
 
@@ -142,28 +160,55 @@
       const playerId = "player_" + Math.random().toString(36).substring(2, 9);
 
       async function createGame() {
-        const name = prompt("Enter your name:") || "Player 1";
+        const name =
+          document.getElementById("playerNameInput").value.trim() || "Player 1";
+        const status = document.getElementById("statusMessage");
+        status.textContent = "⏳ Creating game...";
 
-        const res = await fetch(API + "/create-game", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ playerId, playerName: name }),
-        });
+        // Generate a random 6-character room code
+        const roomCode = Math.random()
+          .toString(36)
+          .substring(2, 8)
+          .toUpperCase();
 
-        const data = await res.json();
-        if (data.success) {
-          document.getElementById("mainMenu").classList.add("hidden");
-          document.getElementById("waitingRoom").classList.remove("hidden");
-          document.getElementById("roomCodeDisplay").textContent =
-            data.roomCode;
+        try {
+          const res = await fetch(API + "/create-game", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              roomCode: roomCode,
+              playerId: playerId,
+              playerName: name,
+            }),
+          });
 
-          // Store for game page
-          localStorage.setItem("roomCode", data.roomCode);
-          localStorage.setItem("playerId", playerId);
-          localStorage.setItem("playerName", name);
+          const data = await res.json();
+          console.log("Create game response:", data);
 
-          // Poll for partner to join
-          checkForPartner(data.roomCode);
+          if (data.success || data.created || data.exists) {
+            status.textContent = "✅ Game created!";
+
+            // Show waiting room
+            document.getElementById("mainMenu").classList.add("hidden");
+            document.getElementById("waitingRoom").classList.remove("hidden");
+            document.getElementById("roomCodeDisplay").textContent = roomCode;
+
+            // Store for game page
+            localStorage.setItem("roomCode", roomCode);
+            localStorage.setItem("playerId", playerId);
+            localStorage.setItem("playerName", name);
+
+            // Poll for partner to join
+            checkForPartner(roomCode);
+          } else {
+            status.textContent =
+              "❌ Error: " + (data.error || data.message || "Unknown error");
+            status.className = "error-text";
+          }
+        } catch (error) {
+          console.error("Error creating game:", error);
+          status.textContent = "❌ Error: " + error.message;
+          status.className = "error-text";
         }
       }
 
@@ -175,63 +220,100 @@
         const name =
           document.getElementById("playerNameInput").value.trim() || "Player 2";
 
+        const status = document.getElementById("statusMessage");
+
         if (!roomCode) {
-          alert("Enter a room code");
+          status.textContent = "❌ Please enter a room code";
+          status.className = "error-text";
           return;
         }
 
-        const res = await fetch(API + "/join-game", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomCode, playerId, playerName: name }),
-        });
+        status.textContent = "⏳ Joining game...";
 
-        const data = await res.json();
-        if (data.success) {
-          localStorage.setItem("roomCode", roomCode);
-          localStorage.setItem("playerId", playerId);
-          localStorage.setItem("playerName", name);
-          window.location.href = "/game.html";
-        } else {
-          alert(data.error);
+        try {
+          const res = await fetch(API + "/join-room", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomCode, playerId, playerName: name }),
+          });
+
+          const data = await res.json();
+          console.log("Join game response:", data);
+
+          if (data.success) {
+            status.textContent = "✅ Joined! Starting game...";
+
+            localStorage.setItem("roomCode", roomCode);
+            localStorage.setItem("playerId", playerId);
+            localStorage.setItem("playerName", name);
+
+            // Redirect to game page
+            setTimeout(() => {
+              window.location.href = "/game.html";
+            }, 500);
+          } else {
+            status.textContent = "❌ " + (data.error || "Failed to join game");
+            status.className = "error-text";
+          }
+        } catch (error) {
+          console.error("Error joining game:", error);
+          status.textContent = "❌ Error: " + error.message;
+          status.className = "error-text";
         }
       }
 
       function checkForPartner(roomCode) {
-        const interval = setInterval(async () => {
-          const res = await fetch(
-            API + "/game-state?room=" + roomCode + "&playerId=" + playerId,
-          );
-          const data = await res.json();
+        const status = document.getElementById("waitingStatus");
+        let attempts = 0;
 
-          if (data.phase === "rules") {
-            clearInterval(interval);
-            window.location.href = "/game.html";
+        const interval = setInterval(async () => {
+          attempts++;
+          status.textContent = `Checking for partner... (${attempts})`;
+
+          try {
+            const res = await fetch(
+              API + "/game-state?room=" + roomCode + "&playerId=" + playerId,
+            );
+            const data = await res.json();
+            console.log("Game state check:", data);
+
+            if (data.phase === "playing" || data.phase === "rules") {
+              status.textContent = "✅ Partner found! Starting game...";
+              clearInterval(interval);
+              setTimeout(() => {
+                window.location.href = "/game.html";
+              }, 500);
+            } else if (data.partnerConnected) {
+              status.textContent = "✅ Partner connected! Starting game...";
+              clearInterval(interval);
+              setTimeout(() => {
+                window.location.href = "/game.html";
+              }, 500);
+            }
+          } catch (error) {
+            console.error("Error checking for partner:", error);
           }
         }, 2000);
+
+        // Timeout after 60 seconds
+        setTimeout(() => {
+          clearInterval(interval);
+          if (status.textContent !== "✅ Partner found! Starting game...") {
+            status.textContent =
+              "⏰ Still waiting for partner... You can share the room code with them.";
+          }
+        }, 60000);
       }
-    </script>
-    <!-- Music Player -->
-    <audio id="bgMusic" loop>
-      <source src="/assets/music/lobby.mp3" type="audio/mpeg" />
-    </audio>
 
-    <script>
-      // Simple music player
-      const bgMusic = document.getElementById("bgMusic");
-
-      // Set volume low
-      bgMusic.volume = 0.2;
-
-      // Start music on first click anywhere
-      document.addEventListener(
-        "click",
-        function startMusic() {
-          bgMusic.play().catch(() => {});
-          document.removeEventListener("click", startMusic);
-        },
-        { once: true },
-      );
+      // Auto-submit on Enter key
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          const roomInput = document.getElementById("roomCodeInput");
+          if (document.activeElement === roomInput) {
+            joinGame();
+          }
+        }
+      });
     </script>
   </body>
 </html>

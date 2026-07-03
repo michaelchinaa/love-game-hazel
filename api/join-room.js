@@ -12,29 +12,23 @@ export default async function handler(req, res) {
    return res.status(400).json({ error: 'Missing roomCode or playerId' });
   }
 
-  // Store player name
-  await kv.set(`player:${playerId}:name`, playerName || 'Player');
-
-  // Get or create room
-  let gameState = await kv.get(`game:${roomCode}`);
-
+  // Get game state
+  const gameState = await kv.get(`game:${roomCode}`);
   if (!gameState) {
-   // Create new room
-   gameState = {
-    phase: 'waiting',
-    currentDay: 0,
-    currentCard: 0,
-    createdAt: Date.now()
-   };
-   await kv.set(`game:${roomCode}`, gameState);
+   return res.status(404).json({ error: 'Room not found' });
   }
 
-  // Add player to room
-  const players = await kv.lrange(`room:${roomCode}:players`, 0, -1) || [];
+  // Get existing players
+  const players = await kv.lrange(`room:${roomCode}:players`, 0, -1);
+
+  // Check if player already in room
   if (!players.includes(playerId)) {
    await kv.rpush(`room:${roomCode}:players`, playerId);
    players.push(playerId);
   }
+
+  // Store player name
+  await kv.set(`player:${playerId}:name`, playerName || 'Player');
 
   // Update game state with players
   gameState.players = players;
@@ -50,12 +44,11 @@ export default async function handler(req, res) {
    success: true,
    phase: gameState.phase,
    players: players,
-   isReady: players.length >= 2,
-   message: players.length >= 2 ? 'Game ready to start!' : 'Waiting for partner...'
+   isReady: players.length >= 2
   });
 
  } catch (error) {
-  console.error('Error in ready:', error);
-  res.status(500).json({ error: 'Failed to mark ready' });
+  console.error('Error joining room:', error);
+  res.status(500).json({ error: 'Failed to join room' });
  }
 }

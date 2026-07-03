@@ -1,451 +1,517 @@
-const http = require('http');
-const fs = require('fs');
+const express = require('express');
+const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
-const PORT = 3000;
-const games = {};
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-// ============================================
-// READ QUESTIONS FROM questions.txt
-// ============================================
-function loadQuestions() {
- const filePath = path.join(__dirname, 'data/questions.txt');
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
 
- if (!fs.existsSync(filePath)) {
-  console.error('ERROR: questions.txt not found!');
-  console.error('Create a questions.txt file in:', __dirname);
-  process.exit(1);
+// ============ IN-MEMORY STORAGE ============
+const db = {
+ games: {},        // Stores active game states
+ players: {},      // Stores players in each room
+ names: {},        // Stores player names
+ answers: {},      // Stores answers for each card
+ results: {},      // Stores the actual result data for each room
+ allResults: []    // Stores a list of room codes that have results
+};
+
+// Helper functions
+function getGame(roomCode) {
+ return db.games[roomCode] || null;
+}
+
+function setGame(roomCode, data) {
+ db.games[roomCode] = data;
+}
+
+function getPlayers(roomCode) {
+ return db.players[roomCode] || [];
+}
+
+function addPlayer(roomCode, playerId) {
+ if (!db.players[roomCode]) {
+  db.players[roomCode] = [];
  }
+ if (!db.players[roomCode].includes(playerId)) {
+  db.players[roomCode].push(playerId);
+ }
+ return db.players[roomCode];
+}
 
- const data = fs.readFileSync(filePath, 'utf8');
- const lines = data.split('\n').filter(line => line.trim() !== '');
+function getPlayerName(playerId) {
+ return db.names[playerId] || 'Player';
+}
 
- const result = {
-  title: '',
-  sacredRules: '',
-  days: []
- };
+function setPlayerName(playerId, name) {
+ db.names[playerId] = name;
+}
 
- let currentDay = null;
+function getAnswers(roomCode, day, card) {
+ const key = `room:${roomCode}:day:${day}:card:${card}:answers`;
+ return db.answers[key] || {};
+}
 
- lines.forEach((line, index) => {
-  const parts = line.split('::');
-  const type = parts[0];
+function setAnswer(roomCode, day, card, playerId, data) {
+ const key = `room:${roomCode}:day:${day}:card:${card}:answers`;
+ if (!db.answers[key]) {
+  db.answers[key] = {};
+ }
+ db.answers[key][playerId] = JSON.stringify(data);
+ return db.answers[key];
+}
 
-  try {
-   if (type === 'GAME_TITLE') {
-    result.title = parts[1];
-   }
-   else if (type === 'SACRED_RULES') {
-    result.sacredRules = parts[1];
-   }
-   else if (type === 'DAY') {
-    currentDay = {
-     dayNumber: parseInt(parts[1]),
-     title: parts[2],
-     deckLabel: parts[3],
-     setting: parts[4],
-     cards: []
-    };
-    result.days.push(currentDay);
-   }
-   else if (type === 'CARD') {
-    const card = {
-     cardNumber: parseInt(parts[1]),
-     title: parts[2],
-     question: parts[3],
-     options: {}
-    };
+function saveResult(roomCode, data) {
+ db.results[roomCode] = data;
+ if (!db.allResults.includes(roomCode)) {
+  db.allResults.push(roomCode);
+ }
+}
 
-    // Parse options A-E
-    for (let i = 4; i < parts.length; i++) {
-     const match = parts[i].match(/^([A-E])\)\s(.+)$/);
-     if (match) {
-      card.options[match[1]] = match[2];
-     }
-    }
+function getResult(roomCode) {
+ return db.results[roomCode] || null;
+}
 
-    if (currentDay) {
-     currentDay.cards.push(card);
-    }
-    changeBackground('rules');
-   }
-  } catch (err) {
-   console.error(`Error parsing line ${index + 1}:`, line.substring(0, 50) + '...');
-   console.error(err.message);
+function getAllResults() {
+ return db.allResults.map(code => db.results[code]).filter(Boolean);
+}
+
+// ============ SERVE STATIC FILES ============
+app.get('/', (req, res) => {
+ res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/results.html', (req, res) => {
+ res.sendFile(path.join(__dirname, 'results.html'));
+});
+
+app.get('/questions.json', (req, res) => {
+ res.sendFile(path.join(__dirname, 'public', 'questions.json'));
+});
+
+// Serve static assets from public/assets
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
+
+// ============ API ROUTES ============
+
+// POST: /api/create-game - Create a new game
+app.post('/api/create-game', (req, res) => {
+ try {
+  const { roomCode, playerId, playerName } = req.body;
+
+  console.log('📥 Create game request:', { roomCode, playerId, playerName });
+
+  if (!roomCode) {
+   return res.status(400).json({
+    error: 'Missing roomCode',
+    message: 'Room code is required'
+   });
   }
- });
 
- // Validate
- console.log('\n✅ Questions loaded from questions.txt');
- console.log(`   ${result.days.length} days found:`);
- result.days.forEach(day => {
-  console.log(`   Day ${day.dayNumber}: ${day.title} - ${day.cards.length} cards`);
- });
- console.log('');
+  if (!playerId) {
+   return res.status(400).json({
+    error: 'Missing playerId',
+    message: 'Player ID is required'
+   });
+  }
 
- return result;
-}
+  let game = getGame(roomCode);
+  if (game) {
+   return res.json({
+    success: true,
+    exists: true,
+    message: 'Game already exists'
+   });
+  }
 
-const questions = loadQuestions();
-
-
-// ============================================
-// SERVER FUNCTIONS
-// ============================================
-
-function sendJSON(res, data, status = 200) {
- res.writeHead(status, {
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
- });
- res.end(JSON.stringify(data));
-}
-
-function parseBody(req) {
- return new Promise((resolve) => {
-  let body = '';
-  req.on('data', chunk => body += chunk);
-  req.on('end', () => {
-   try { resolve(JSON.parse(body)); }
-   catch { resolve({}); }
-  });
- });
-}
-
-const server = http.createServer(async (req, res) => {
- const url = new URL(req.url, `http://localhost:${PORT}`);
- const pathname = url.pathname;
-
- if (req.method === 'OPTIONS') {
-  res.writeHead(204, {
-   'Access-Control-Allow-Origin': '*',
-   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-   'Access-Control-Allow-Headers': 'Content-Type'
-  });
-  res.end();
-  return;
- }
-
- // ========== API ROUTES ==========
-
- // Serve questions as JSON
- if (pathname === '/questions.json') {
-  sendJSON(res, questions);
-  return;
- }
-
- // Create game
- if (pathname === '/api/create-game' && req.method === 'POST') {
-  const body = await parseBody(req);
-  const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-  games[roomCode] = {
-   roomCode,
-   player1: { id: body.playerId, name: body.playerName || 'Player 1' },
-   player2: null,
+  game = {
+   phase: 'waiting',
    currentDay: 0,
    currentCard: 0,
-   phase: 'waiting',
-   answers: {},
-   readyCount: 0,
-   nextCount: 0,
-   createdAt: Date.now()
+   createdAt: Date.now(),
+   players: [playerId]
   };
+  setGame(roomCode, game);
 
-  console.log(`Game created: ${roomCode} | Player 1: ${body.playerId}`);
-  sendJSON(res, { success: true, roomCode });
-  return;
+  setPlayerName(playerId, playerName || 'Player');
+  addPlayer(roomCode, playerId);
+
+  console.log(`✅ Game created successfully in room: ${roomCode}`);
+
+  res.json({
+   success: true,
+   created: true,
+   roomCode: roomCode,
+   message: 'Game created successfully'
+  });
+
+ } catch (error) {
+  console.error('Error in /api/create-game:', error);
+  res.status(500).json({
+   error: 'Failed to create game',
+   details: error.message
+  });
  }
+});
 
- // Join game
- if (pathname === '/api/join-game' && req.method === 'POST') {
-  const body = await parseBody(req);
-  const game = games[body.roomCode];
+// POST: /api/join-room - Join an existing room
+app.post('/api/join-room', (req, res) => {
+ try {
+  const { roomCode, playerId, playerName } = req.body;
 
-  if (!game) { sendJSON(res, { error: 'Room not found' }, 404); return; }
-  if (game.player2) { sendJSON(res, { error: 'Room is full' }, 400); return; }
+  if (!roomCode || !playerId) {
+   return res.status(400).json({ error: 'Missing roomCode or playerId' });
+  }
 
-  game.player2 = { id: body.playerId, name: body.playerName || 'Player 2' };
-  game.phase = 'rules';
+  console.log(`📝 ${playerName || 'Player'} (${playerId}) joining room ${roomCode}`);
 
-  console.log(`Player 2 joined: ${body.roomCode} | ${body.playerId}`);
-  sendJSON(res, { success: true });
-  return;
- }
+  let game = getGame(roomCode);
+  if (!game) {
+   return res.status(404).json({ error: 'Room not found' });
+  }
 
- // Get game state (polling)
- if (pathname === '/api/game-state' && req.method === 'GET') {
-  const room = url.searchParams.get('room');
-  const playerId = url.searchParams.get('playerId');
-  const game = games[room];
+  setPlayerName(playerId, playerName || 'Player');
+  const players = addPlayer(roomCode, playerId);
+  console.log(`👥 Players in ${roomCode}:`, players);
 
-  if (!game) { sendJSON(res, { phase: 'error' }, 404); return; }
+  game.players = players;
+  const isReady = players.length >= 2;
+  if (isReady && game.phase === 'waiting') {
+   game.phase = 'playing';
+   setGame(roomCode, game);
+   console.log(`🎮 Game starting in ${roomCode}!`);
+  }
 
-  const cardKey = `${game.currentDay}-${game.currentCard}`;
-  const answers = game.answers[cardKey] || {};
-
-  sendJSON(res, {
+  res.json({
+   success: true,
    phase: game.phase,
+   players: players,
+   isReady: isReady,
+   message: isReady ? 'Game ready to start!' : 'Waiting for partner...'
+  });
+
+ } catch (error) {
+  console.error('Error in /api/join-room:', error);
+  res.status(500).json({ error: 'Failed to join room' });
+ }
+});
+
+// POST: /api/ready - Mark player as ready
+app.post('/api/ready', (req, res) => {
+ try {
+  const { roomCode, playerId, playerName } = req.body;
+
+  if (!roomCode || !playerId) {
+   return res.status(400).json({ error: 'Missing roomCode or playerId' });
+  }
+
+  console.log(`📝 ${playerName || 'Player'} (${playerId}) ready in room ${roomCode}`);
+
+  setPlayerName(playerId, playerName || 'Player');
+
+  let game = getGame(roomCode);
+  if (!game) {
+   game = {
+    phase: 'waiting',
+    currentDay: 0,
+    currentCard: 0,
+    createdAt: Date.now()
+   };
+   setGame(roomCode, game);
+  }
+
+  const players = addPlayer(roomCode, playerId);
+  console.log(`👥 Players in ${roomCode}:`, players);
+
+  const isReady = players.length >= 2;
+  if (isReady && game.phase === 'waiting') {
+   game.phase = 'playing';
+   setGame(roomCode, game);
+   console.log(`🎮 Game starting in ${roomCode}!`);
+  }
+
+  res.json({
+   success: true,
+   phase: game.phase,
+   players: players,
+   isReady: isReady,
+   message: isReady ? 'Game ready to start!' : 'Waiting for partner...'
+  });
+
+ } catch (error) {
+  console.error('Error in /api/ready:', error);
+  res.status(500).json({ error: 'Failed to mark ready' });
+ }
+});
+
+// GET: /api/game-state - Get current game state
+app.get('/api/game-state', (req, res) => {
+ try {
+  const { room, playerId } = req.query;
+
+  if (!room || !playerId) {
+   return res.status(400).json({ error: 'Missing room or playerId' });
+  }
+
+  const game = getGame(room);
+  if (!game) {
+   return res.json({
+    phase: 'not_found',
+    error: 'Room not found'
+   });
+  }
+
+  const players = getPlayers(room);
+  const partnerId = players.find(id => id !== playerId);
+  const partnerConnected = !!partnerId;
+  const partnerName = partnerId ? getPlayerName(partnerId) : null;
+
+  const day = game.currentDay || 0;
+  const card = game.currentCard || 0;
+  const answers = getAnswers(room, day, card);
+
+  const parsedAnswers = {};
+  let allAnswered = false;
+  for (const [key, value] of Object.entries(answers)) {
+   try {
+    parsedAnswers[key] = JSON.parse(value);
+   } catch {
+    parsedAnswers[key] = value;
+   }
+  }
+
+  if (players.length > 0) {
+   let answeredCount = 0;
+   for (const p of players) {
+    if (parsedAnswers[p]) answeredCount++;
+   }
+   allAnswered = answeredCount === players.length && players.length > 0;
+  }
+
+  if (game.phase === 'playing' && allAnswered) {
+   game.phase = 'reveal';
+   setGame(room, game);
+  }
+
+  res.json({
+   phase: game.phase || 'waiting',
+   currentDay: game.currentDay || 0,
+   currentCard: game.currentCard || 0,
+   players: players,
+   partnerConnected: partnerConnected,
+   partnerName: partnerName,
+   answers: parsedAnswers,
+   allAnswered: allAnswered,
+   isComplete: game.phase === 'complete',
+   playerId: playerId,
+   totalCards: getTotalCardsForDay(day) // Get dynamic card count
+  });
+
+ } catch (error) {
+  console.error('Error in /api/game-state:', error);
+  res.status(500).json({ error: 'Failed to get game state' });
+ }
+});
+
+// Helper: Get total cards for a specific day from questions.json
+function getTotalCardsForDay(dayIndex) {
+ try {
+  const questionsPath = path.join(__dirname, 'public', 'questions.json');
+  if (fs.existsSync(questionsPath)) {
+   const data = JSON.parse(fs.readFileSync(questionsPath, 'utf8'));
+   if (data.days && data.days[dayIndex]) {
+    return data.days[dayIndex].cards.length;
+   }
+  }
+ } catch (error) {
+  console.error('Error reading questions.json:', error);
+ }
+ return 5; // Default fallback
+}
+
+// POST: /api/submit-answer - Submit an answer
+app.post('/api/submit-answer', (req, res) => {
+ try {
+  const { roomCode, playerId, choice, customText } = req.body;
+
+  if (!roomCode || !playerId || !choice) {
+   return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const game = getGame(roomCode);
+  if (!game) {
+   return res.status(404).json({ error: 'Game not found' });
+  }
+
+  if (game.phase !== 'playing') {
+   return res.status(400).json({ error: 'Game is not in playing phase' });
+  }
+
+  const day = game.currentDay || 0;
+  const card = game.currentCard || 0;
+
+  const answerData = {
+   choice,
+   customText,
+   timestamp: Date.now(),
+   playerId
+  };
+  setAnswer(roomCode, day, card, playerId, answerData);
+
+  const players = getPlayers(roomCode);
+  const answers = getAnswers(roomCode, day, card);
+
+  let answeredCount = 0;
+  for (const p of players) {
+   if (answers[p]) answeredCount++;
+  }
+  const allAnswered = answeredCount === players.length && players.length > 0;
+
+  if (allAnswered && players.length >= 2) {
+   game.phase = 'reveal';
+   setGame(roomCode, game);
+  }
+
+  res.json({
+   success: true,
+   allAnswered,
+   totalPlayers: players.length,
+   answeredCount: answeredCount,
+   phase: game.phase,
+   message: allAnswered ? 'All players have answered!' : `Waiting for partner... (${answeredCount}/${players.length})`
+  });
+
+ } catch (error) {
+  console.error('Error in /api/submit-answer:', error);
+  res.status(500).json({ error: 'Failed to submit answer' });
+ }
+});
+
+// POST: /api/next-card - Move to next card
+app.post('/api/next-card', (req, res) => {
+ try {
+  const { roomCode, playerId } = req.body;
+
+  if (!roomCode) {
+   return res.status(400).json({ error: 'Missing roomCode' });
+  }
+
+  const game = getGame(roomCode);
+  if (!game) {
+   return res.status(404).json({ error: 'Game not found' });
+  }
+
+  // Move to next card
+  game.phase = 'playing';
+  game.currentCard = (game.currentCard || 0) + 1;
+
+  // Get total cards for this day from questions.json
+  const totalCards = getTotalCardsForDay(game.currentDay);
+
+  console.log(`📄 Day ${game.currentDay + 1}, Card ${game.currentCard + 1}/${totalCards}`);
+
+  // Check if we've completed all cards for this day
+  if (game.currentCard >= totalCards) {
+   game.currentCard = 0;
+   game.currentDay = (game.currentDay || 0) + 1;
+
+   console.log(`📆 Moving to Day ${game.currentDay + 1}`);
+
+   // Check if game is complete (5 days)
+   if (game.currentDay >= 5) {
+    game.phase = 'complete';
+    setGame(roomCode, game);
+    console.log(`🏁 Game complete in room ${roomCode}!`);
+    return res.json({
+     success: true,
+     phase: 'complete',
+     message: 'Game complete!'
+    });
+   }
+  }
+
+  setGame(roomCode, game);
+
+  res.json({
+   success: true,
    currentDay: game.currentDay,
    currentCard: game.currentCard,
-   partnerConnected: playerId === game.player1?.id ? !!game.player2 : !!game.player1,
-   answers: answers
+   phase: game.phase
   });
-  return;
+
+ } catch (error) {
+  console.error('Error in /api/next-card:', error);
+  res.status(500).json({ error: 'Failed to advance to next card' });
  }
-
- // Player ready
- if (pathname === '/api/ready' && req.method === 'POST') {
-  const body = await parseBody(req);
-  const game = games[body.roomCode];
-  if (!game) { sendJSON(res, { error: 'Game not found' }, 404); return; }
-
-  game.readyCount++;
-  console.log(`Ready: ${game.readyCount}/2`);
-
-  if (game.readyCount >= 2) {
-   game.phase = 'playing';
-   game.readyCount = 0;
-   console.log('>>> GAME STARTING');
-  }
-
-  sendJSON(res, { success: true });
-  return;
- }
-
- // Submit answer
- if (pathname === '/api/submit-answer' && req.method === 'POST') {
-  const body = await parseBody(req);
-  const game = games[body.roomCode];
-  if (!game) { sendJSON(res, { error: 'Game not found' }, 404); return; }
-
-  const cardKey = `${game.currentDay}-${game.currentCard}`;
-  if (!game.answers[cardKey]) {
-   game.answers[cardKey] = {};
-  }
-
-  game.answers[cardKey][body.playerId] = {
-   choice: body.choice,
-   customText: body.customText || null,
-   time: new Date().toISOString()
-  };
-
-  const answerCount = Object.keys(game.answers[cardKey]).length;
-  console.log(`Answer: ${cardKey} | Player: ${body.playerId} | Choice: ${body.choice} | Total: ${answerCount}/2`);
-
-  // After both players answer, save the result with full details
-  if (answerCount >= 2) {
-   game.phase = 'reveal';
-   console.log('>>> BOTH ANSWERED - Phase: reveal');
-
-   // Save this card's result with full question and answer text
-   saveCardResult(game, cardKey);
-  }
-
-  sendJSON(res, { success: true });
-  return;
- }
-
- // Next card
- if (pathname === '/api/next-card' && req.method === 'POST') {
-  const body = await parseBody(req);
-  const game = games[body.roomCode];
-  if (!game) { sendJSON(res, { error: 'Game not found' }, 404); return; }
-
-  game.nextCount++;
-  console.log(`Next: ${game.nextCount}/2`);
-
-  if (game.nextCount >= 2) {
-   game.nextCount = 0;
-
-   const day = questions.days[game.currentDay];
-   if (day) {
-    game.currentCard++;
-    if (game.currentCard >= day.cards.length) {
-     game.currentDay++;
-     game.currentCard = 0;
-    }
-   }
-
-   if (game.currentDay >= questions.days.length) {
-    game.phase = 'complete';
-    game.completedAt = new Date().toISOString();
-    console.log('>>> GAME COMPLETE');
-    saveGameComplete(game);
-   } else {
-    // IMPORTANT: Set phase back to playing for the next card
-    game.phase = 'playing';
-    console.log(`>>> NEXT CARD: Day ${game.currentDay + 1}, Card ${game.currentCard + 1}`);
-   }
-  }
-
-  sendJSON(res, { success: true });
-  return;
- }
-
- // ========== STATIC FILES ==========
- const filePath = pathname === '/' ? '/index.html' : pathname;
- const fullPath = path.join(__dirname, 'public', filePath);
-
- fs.readFile(fullPath, (err, data) => {
-  if (err) {
-   fs.readFile(path.join(__dirname, 'public', 'index.html'), (err2, data2) => {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(data2 || 'Not Found');
-   });
-  } else {
-   const ext = path.extname(fullPath);
-   const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' };
-   res.writeHead(200, { 'Content-Type': types[ext] || 'text/plain' });
-   res.end(data);
-  }
- });
 });
-// Save a single card result with full details
-function saveCardResult(game, cardKey) {
+
+// POST: /api/save-results - Save game results
+app.post('/api/save-results', (req, res) => {
  try {
-  const [dayIndex, cardIndex] = cardKey.split('-').map(Number);
-  const day = questions.days[dayIndex];
-  if (!day) return;
+  const { roomCode, results } = req.body;
 
-  const card = day.cards[cardIndex];
-  if (!card) return;
-
-  const answers = game.answers[cardKey];
-  if (!answers) return;
-
-  const player1Id = game.player1?.id;
-  const player2Id = game.player2?.id;
-
-  const result = {
-   roomCode: game.roomCode,
-   dayNumber: day.dayNumber,
-   dayTitle: day.title,
-   deckLabel: day.deckLabel,
-   cardNumber: card.cardNumber,
-   cardTitle: card.title,
-   question: card.question,
-   options: card.options,
-   player1: null,
-   player2: null,
-   answeredAt: new Date().toISOString()
-  };
-
-  // Player 1's answer
-  if (player1Id && answers[player1Id]) {
-   const answer = answers[player1Id];
-   result.player1 = {
-    name: game.player1.name,
-    choice: answer.choice,
-    choiceText: answer.choice === 'E' ? 'Other (Custom)' : (card.options[answer.choice] || 'Unknown'),
-    customText: answer.customText || null
-   };
+  if (!roomCode || !results) {
+   return res.status(400).json({ error: 'Missing roomCode or results' });
   }
 
-  // Player 2's answer
-  if (player2Id && answers[player2Id]) {
-   const answer = answers[player2Id];
-   result.player2 = {
-    name: game.player2.name,
-    choice: answer.choice,
-    choiceText: answer.choice === 'E' ? 'Other (Custom)' : (card.options[answer.choice] || 'Unknown'),
-    customText: answer.customText || null
-   };
-  }
+  console.log(`💾 Saving results for room ${roomCode}`);
 
-  // Read existing results
-  const resultsFile = path.join(__dirname, 'results.json');
-  let allResults = [];
-
-  if (fs.existsSync(resultsFile)) {
-   try {
-    const raw = fs.readFileSync(resultsFile, 'utf8');
-    allResults = JSON.parse(raw);
-    if (!Array.isArray(allResults)) {
-     allResults = allResults.games || [];
-    }
-   } catch (e) {
-    allResults = [];
-   }
-  }
-
-  // Check if this card already has a result (update it)
-  const existingIndex = allResults.findIndex(r =>
-   r.roomCode === game.roomCode &&
-   r.dayNumber === result.dayNumber &&
-   r.cardNumber === result.cardNumber
-  );
-
-  if (existingIndex >= 0) {
-   allResults[existingIndex] = result;
-  } else {
-   allResults.push(result);
-  }
-
-  // Sort by room code, day, card
-  allResults.sort((a, b) => {
-   if (a.roomCode !== b.roomCode) return a.roomCode.localeCompare(b.roomCode);
-   if (a.dayNumber !== b.dayNumber) return a.dayNumber - b.dayNumber;
-   return a.cardNumber - b.cardNumber;
+  saveResult(roomCode, {
+   ...results,
+   savedAt: new Date().toISOString()
   });
 
-  fs.writeFileSync(resultsFile, JSON.stringify(allResults, null, 2), 'utf8');
-  console.log('📝 Result saved:', result.dayTitle, '-', result.cardTitle);
+  delete db.games[roomCode];
+  delete db.players[roomCode];
 
- } catch (err) {
-  console.error('Error saving result:', err.message);
+  res.json({
+   success: true,
+   message: 'Results saved successfully'
+  });
+
+ } catch (error) {
+  console.error('Error in /api/save-results:', error);
+  res.status(500).json({ error: 'Failed to save results' });
  }
-}
+});
 
-// Save complete game summary when game ends
-function saveGameComplete(game) {
+// GET: /api/get-results - Get results
+app.get('/api/get-results', (req, res) => {
  try {
-  const resultsFile = path.join(__dirname, 'results.json');
-  let allResults = [];
+  const { roomCode } = req.query;
+  let results = [];
 
-  if (fs.existsSync(resultsFile)) {
-   try {
-    const raw = fs.readFileSync(resultsFile, 'utf8');
-    allResults = JSON.parse(raw);
-    if (!Array.isArray(allResults)) {
-     allResults = allResults.games || [];
-    }
-   } catch (e) {
-    allResults = [];
-   }
+  if (roomCode) {
+   const result = getResult(roomCode);
+   if (result) results = [result];
+  } else {
+   results = getAllResults();
   }
 
-  // Add game summary at the top
-  const summary = {
-   type: 'GAME_SUMMARY',
-   roomCode: game.roomCode,
-   player1: game.player1?.name || 'Unknown',
-   player2: game.player2?.name || 'Unknown',
-   startedAt: new Date(game.createdAt).toISOString(),
-   completedAt: new Date().toISOString(),
-   totalCardsAnswered: Object.keys(game.answers).length,
-   daysCompleted: game.currentDay
-  };
+  res.json({
+   success: true,
+   results,
+   total: results.length
+  });
 
-  allResults.push(summary);
-
-  fs.writeFileSync(resultsFile, JSON.stringify(allResults, null, 2), 'utf8');
-  console.log('📝 Game summary saved');
-
- } catch (err) {
-  console.error('Error saving game summary:', err.message);
+ } catch (error) {
+  console.error('Error in /api/get-results:', error);
+  res.status(500).json({ error: 'Failed to get results' });
  }
-}
+});
 
-server.listen(PORT, () => {
- console.log('\n========================================');
- console.log('  🃏  Card Game Server');
- console.log('========================================');
- console.log(`  Open: http://localhost:${PORT}`);
- console.log('  Open TWO browser tabs to play');
- console.log('  Edit questions.txt to change cards');
- console.log('========================================\n');
+// ============ START SERVER ============
+app.listen(PORT, () => {
+ console.log(`\n🚀 Server running at http://localhost:${PORT}`);
+ console.log(`📊 Results page: http://localhost:${PORT}/results.html`);
+ console.log(`🎮 Game page: http://localhost:${PORT}/`);
+ console.log('\n💡 To test multiplayer:');
+ console.log('   1. Open two browser windows');
+ console.log('   2. Enter the SAME room code in both');
+ console.log('   3. Both players should connect\n');
 });

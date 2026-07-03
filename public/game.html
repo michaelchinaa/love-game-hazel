@@ -361,20 +361,48 @@
         }
       }
 
+      // ============ ACCEPT RULES ============
       function acceptRules() {
         if (rulesAccepted) return;
         rulesAccepted = true;
         document.getElementById("acceptBtn").disabled = true;
-        document.getElementById("acceptBtn").textContent = "Accepted ✓";
+        document.getElementById("acceptBtn").textContent = "Joining...";
+
+        const playerName = localStorage.getItem("playerName") || "Player";
 
         fetch("/api/ready", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomCode, playerId }),
+          body: JSON.stringify({
+            roomCode,
+            playerId,
+            playerName: playerName,
+          }),
         })
-          .then(() => {
-            document.getElementById("rulesOverlay").classList.add("hidden");
-            document.getElementById("waitingBoth").classList.remove("hidden");
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              document.getElementById("rulesOverlay").classList.add("hidden");
+
+              if (data.isReady) {
+                // Game is ready to start
+                document.getElementById("waitingBoth").classList.add("hidden");
+                document
+                  .getElementById("gameHeader")
+                  .classList.remove("hidden");
+                document.getElementById("cardArea").classList.remove("hidden");
+                showCard();
+              } else {
+                // Waiting for partner
+                document
+                  .getElementById("waitingBoth")
+                  .classList.remove("hidden");
+                document
+                  .getElementById("waitingBoth")
+                  .querySelector("p").textContent =
+                  "Waiting for partner to join...";
+              }
+            }
           })
           .catch(() => {
             rulesAccepted = false;
@@ -384,6 +412,7 @@
           });
       }
 
+      // ============ START POLLING ============
       function startPolling() {
         pollingInterval = setInterval(async () => {
           if (isVideoPlaying || isCompleteProcessing) {
@@ -396,17 +425,31 @@
             );
             const data = await res.json();
 
+            // Handle room not found
+            if (data.phase === "not_found") {
+              document.getElementById("statusText").textContent =
+                "Room not found. Please recreate.";
+              return;
+            }
+
             const dot = document.getElementById("statusDot");
             const text = document.getElementById("statusText");
+
             if (data.partnerConnected) {
               dot.className = "status-dot connected";
-              text.textContent = "Partner connected";
-              if (data.partnerName) {
-                partnerName = data.partnerName;
-              }
+              text.textContent = `Partner connected: ${data.partnerName || "Partner"}`;
             } else {
               dot.className = "status-dot disconnected";
               text.textContent = "Waiting for partner...";
+            }
+
+            // Handle different phases
+            if (data.phase === "waiting") {
+              document.getElementById("waitingBoth").classList.remove("hidden");
+              document.getElementById("gameHeader").classList.add("hidden");
+              document.getElementById("cardArea").classList.add("hidden");
+              document.getElementById("revealArea").classList.add("hidden");
+              return; // FIXED: replaced 'continue' with 'return'
             }
 
             if (data.phase === "playing") {
@@ -420,62 +463,51 @@
                 data.currentCard !== currentCardIndex;
 
               if (cardChanged) {
+                // Check if we need to play a day video
                 if (
                   data.currentDay !== currentDayIndex &&
                   currentDayIndex >= 0
                 ) {
-                  isVideoPlaying = true;
                   const dayToPlay = currentDayIndex + 1;
-
                   if (dayToPlay >= 1 && dayToPlay <= 4) {
+                    isVideoPlaying = true;
                     playDayVideo(dayToPlay, function () {
                       isVideoPlaying = false;
-                      isCardLocked = false;
                       continueToDay(data);
                     });
                     return;
-                  } else {
-                    isVideoPlaying = false;
-                    isCardLocked = false;
-                    continueToDay(data);
-                    return;
                   }
                 }
-
-                isCardLocked = false;
                 continueToDay(data);
               } else {
-                // Same card - check if we need to show waiting or reveal
-                if (data.allAnswered && data.phase === "reveal") {
-                  // Both answered, show reveal
-                  showReveal(data.answers);
-                } else if (data.answers && data.answers[playerId]) {
-                  // We've answered, waiting for partner
+                // Same card - check answer status
+                if (data.answers && data.answers[playerId]) {
+                  // We've answered
                   document.getElementById("submitBtn").classList.add("hidden");
                   document
                     .getElementById("waitingSubmit")
                     .classList.remove("hidden");
+
+                  // Show waiting message with count
+                  const players = data.players || [];
+                  const answeredCount = Object.keys(data.answers).length;
+                  document.getElementById("waitingSubmit").textContent =
+                    `Waiting for partner... (${answeredCount}/${players.length})`;
+
                   document.querySelectorAll(".option").forEach((o) => {
                     o.style.pointerEvents = "none";
                   });
-                  // Keep the selected option highlighted
-                  if (selectedOption) {
-                    document.querySelectorAll(".option").forEach((o) => {
-                      if (o.textContent.includes(`${selectedOption})`)) {
-                        o.classList.add("selected");
-                      }
-                    });
-                  }
                 }
               }
             } else if (data.phase === "reveal") {
               showReveal(data.answers);
             } else if (data.phase === "complete") {
               if (!isCompleteProcessing && !isVideoPlaying) {
-                console.log("🎬 Complete phase detected, playing day 5 video");
+                console.log("🎬 Complete phase detected");
                 isCompleteProcessing = true;
                 isVideoPlaying = true;
 
+                // Play day 5 video
                 playDayVideo(5, function () {
                   isVideoPlaying = false;
                   isCompleteProcessing = false;
@@ -488,11 +520,13 @@
           } catch (err) {
             console.error("Poll error:", err);
           }
-        }, 2000); // Increased from 1500ms to 2000ms to reduce race conditions
+        }, 2000);
       }
+
       function continueToDay(data) {
         currentDayIndex = data.currentDay;
         currentCardIndex = data.currentCard;
+
         // Reset submission state for new card
         hasSubmitted = false;
         selectedOption = null;
@@ -501,6 +535,13 @@
         playTrack(musicKey);
         changeBackground("day" + (data.currentDay + 1));
         showCard();
+
+        // Show the correct card count
+        const day = questions.days[currentDayIndex];
+        if (day) {
+          document.getElementById("cardCounter").textContent =
+            `Card ${currentCardIndex + 1} of ${day.cards.length}`;
+        }
       }
 
       function showCard() {
@@ -536,8 +577,8 @@
           .map(
             ([letter, text]) =>
               `<button class="option" onclick="selectOption('${letter}', this)">
-              <strong style="color:#d4af37;">${letter})</strong> ${text}
-          </button>`,
+                    <strong style="color:#d4af37;">${letter})</strong> ${text}
+                </button>`,
           )
           .join("");
 
@@ -556,6 +597,7 @@
         // Hide waiting message
         document.getElementById("waitingSubmit").classList.add("hidden");
       }
+
       function selectOption(letter, btn) {
         if (hasSubmitted) return;
         if (isCardLocked) return;
@@ -614,17 +656,24 @@
           timestamp: new Date().toISOString(),
         });
 
-        const response = await fetch("/api/submit-answer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            roomCode: roomCode,
-            playerId: playerId,
-            choice: selectedOption,
-            customText: customText,
-          }),
-        });
+        try {
+          const response = await fetch("/api/submit-answer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              roomCode: roomCode,
+              playerId: playerId,
+              choice: selectedOption,
+              customText: customText,
+            }),
+          });
+          const data = await response.json();
+          console.log("Submit answer response:", data);
+        } catch (error) {
+          console.error("Error submitting answer:", error);
+        }
       }
+
       function showReveal(answers) {
         if (!answers) return;
         document.getElementById("cardArea").classList.add("hidden");
@@ -643,9 +692,9 @@
           const fullText = options[choiceLetter] || "Custom Answer";
 
           document.getElementById("yourChoice").innerHTML = `
-                  <strong style="color:#d4af37;">You chose ${choiceLetter}:</strong><br>
-                  <span style="line-height:1.6;">${fullText}</span>
-              `;
+                        <strong style="color:#d4af37;">You chose ${choiceLetter}:</strong><br>
+                        <span style="line-height:1.6;">${fullText}</span>
+                    `;
 
           const yourCustom = document.getElementById("yourCustomText");
           if (myAnswer.customText) {
@@ -661,9 +710,9 @@
           const partnerFullText = options[partnerChoice] || "Custom Answer";
 
           document.getElementById("partnerChoice").innerHTML = `
-                  <strong style="color:#d4af37;">Partner chose ${partnerChoice}:</strong><br>
-                  <span style="line-height:1.6;">${partnerFullText}</span>
-              `;
+                        <strong style="color:#d4af37;">Partner chose ${partnerChoice}:</strong><br>
+                        <span style="line-height:1.6;">${partnerFullText}</span>
+                    `;
 
           const partnerCustom = document.getElementById("partnerCustomText");
           if (partnerAnswer.customText) {
@@ -679,11 +728,17 @@
       }
 
       async function nextCard() {
-        const response = await fetch("/api/next-card", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomCode, playerId }),
-        });
+        try {
+          const response = await fetch("/api/next-card", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomCode, playerId }),
+          });
+          const data = await response.json();
+          console.log("Next card response:", data);
+        } catch (error) {
+          console.error("Error going to next card:", error);
+        }
       }
 
       // ============ SHOW COMPLETE WITH RESULTS SAVING ============
