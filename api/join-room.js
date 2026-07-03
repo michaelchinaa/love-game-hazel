@@ -17,9 +17,11 @@ export default async function handler(req, res) {
   // Check if room exists
   const gameState = await kv.get(`game:${roomCode}`);
   if (!gameState) {
-   console.log(`❌ Room ${roomCode} not found`);
+   console.log(`❌ Room ${roomCode} not found in KV`);
    return res.status(404).json({
-    error: 'Room not found. Please check the room code and try again.'
+    success: false,
+    error: 'Room not found. Please check the room code and try again.',
+    code: 'ROOM_NOT_FOUND'
    });
   }
 
@@ -61,6 +63,7 @@ export default async function handler(req, res) {
  } catch (error) {
   console.error('Error in /api/join-room:', error);
   return res.status(500).json({
+   success: false,
    error: 'Failed to join room',
    details: error.message
   });

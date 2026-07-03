@@ -4,122 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Card Game - Lobby</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: Georgia, serif;
-        background: #1a1a2e;
-        color: #e0d5c1;
-        min-height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-
-      .container {
-        background: rgba(255, 255, 255, 0.05);
-        padding: 40px;
-        border-radius: 20px;
-        border: 1px solid rgba(212, 175, 55, 0.3);
-        text-align: center;
-        max-width: 500px;
-        width: 90%;
-      }
-
-      h1 {
-        color: #d4af37;
-        margin-bottom: 20px;
-      }
-
-      .btn {
-        display: block;
-        width: 100%;
-        padding: 15px;
-        margin: 10px 0;
-        border: none;
-        border-radius: 10px;
-        font-size: 16px;
-        cursor: pointer;
-        font-family: inherit;
-        font-weight: bold;
-        transition: all 0.3s;
-      }
-
-      .btn-primary {
-        background: #d4af37;
-        color: #1a1a2e;
-      }
-
-      .btn-primary:hover {
-        box-shadow: 0 0 20px rgba(212, 175, 55, 0.5);
-      }
-
-      .btn-secondary {
-        background: transparent;
-        border: 2px solid #d4af37;
-        color: #d4af37;
-      }
-
-      .btn-secondary:hover {
-        background: rgba(212, 175, 55, 0.1);
-      }
-
-      .input {
-        width: 100%;
-        padding: 15px;
-        margin: 10px 0;
-        border-radius: 10px;
-        border: 1px solid rgba(212, 175, 55, 0.4);
-        background: rgba(0, 0, 0, 0.3);
-        color: #e0d5c1;
-        font-size: 16px;
-        font-family: inherit;
-      }
-
-      .input:focus {
-        outline: none;
-        border-color: #d4af37;
-        box-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
-      }
-
-      .divider {
-        color: #a09070;
-        margin: 15px 0;
-      }
-
-      .room-code {
-        font-size: 48px;
-        color: #d4af37;
-        letter-spacing: 8px;
-        font-family: monospace;
-        margin: 20px 0;
-      }
-
-      .hidden {
-        display: none;
-      }
-
-      .status-text {
-        color: #a09070;
-        margin-top: 15px;
-        font-style: italic;
-      }
-
-      .error-text {
-        color: #ff6666;
-        margin-top: 10px;
-      }
-    </style>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div class="container">
+    <div class="lobby-container">
       <h1>🃏 Card Game</h1>
-      <a href="/results.html" class="btn btn-secondary">📊 View Results</a>
+      <a
+        href="/results.html"
+        class="btn btn-secondary"
+        style="margin-bottom: 15px"
+        >📊 View Results</a
+      >
+
       <div id="mainMenu">
         <button class="btn btn-primary" onclick="createGame()">
           Create New Game
@@ -175,11 +71,7 @@
           const res = await fetch(API + "/create-game", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              roomCode: roomCode,
-              playerId: playerId,
-              playerName: name,
-            }),
+            body: JSON.stringify({ roomCode, playerId, playerName: name }),
           });
 
           const data = await res.json();
@@ -188,17 +80,14 @@
           if (data.success || data.created || data.exists) {
             status.textContent = "✅ Game created!";
 
-            // Show waiting room
             document.getElementById("mainMenu").classList.add("hidden");
             document.getElementById("waitingRoom").classList.remove("hidden");
             document.getElementById("roomCodeDisplay").textContent = roomCode;
 
-            // Store for game page
             localStorage.setItem("roomCode", roomCode);
             localStorage.setItem("playerId", playerId);
             localStorage.setItem("playerName", name);
 
-            // Poll for partner to join
             checkForPartner(roomCode);
           } else {
             status.textContent =
@@ -247,7 +136,6 @@
             localStorage.setItem("playerId", playerId);
             localStorage.setItem("playerName", name);
 
-            // Redirect to game page
             setTimeout(() => {
               window.location.href = "/game.html";
             }, 500);
@@ -295,25 +183,14 @@
           }
         }, 2000);
 
-        // Timeout after 60 seconds
         setTimeout(() => {
           clearInterval(interval);
           if (status.textContent !== "✅ Partner found! Starting game...") {
             status.textContent =
-              "⏰ Still waiting for partner... You can share the room code with them.";
+              "⏰ Still waiting for partner... Share the room code with them.";
           }
         }, 60000);
       }
-
-      // Auto-submit on Enter key
-      document.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") {
-          const roomInput = document.getElementById("roomCodeInput");
-          if (document.activeElement === roomInput) {
-            joinGame();
-          }
-        }
-      });
     </script>
   </body>
 </html>
