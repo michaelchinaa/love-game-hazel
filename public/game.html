@@ -153,6 +153,22 @@
         </button>
       </div>
 
+      <!-- Fix Room Button -->
+      <button
+        class="btn"
+        onclick="fixRoom()"
+        style="
+          margin-top: 15px;
+          background: #ff6b6b;
+          color: white;
+          text-transform: none;
+          display: none;
+        "
+        id="fixRoomBtn"
+      >
+        🔧 Fix Room (if stuck)
+      </button>
+
       <!-- Status -->
       <div class="status">
         <span class="status-dot" id="statusDot"></span>
@@ -191,24 +207,18 @@
         if (!videoFile || bgVideo.src.includes(videoFile)) return;
 
         console.log("🖼️ Changing background:", dayKey);
-
-        // Fade out
         bgVideo.style.opacity = "0";
 
         setTimeout(() => {
           bgVideo.src = videoFile;
           bgVideo.load();
           bgVideo.play().catch(() => {});
-
-          // Fade in
           bgVideo.style.opacity = "1";
         }, 500);
       }
-
-      // Add transition style to video
       bgVideo.style.transition = "opacity 0.8s ease-in-out";
 
-      // ============ MUSIC SYSTEM (AUTO-PLAY) ============
+      // ============ MUSIC SYSTEM ============
       const bgMusic = document.getElementById("bgMusic");
       const musicBtn = document.getElementById("musicBtn");
       const volumeSlider = document.getElementById("volumeSlider");
@@ -239,7 +249,6 @@
       function playTrack(trackKey, force = false) {
         const track = tracks[trackKey];
         if (!track) return;
-
         if (currentTrack === trackKey && !force) return;
 
         console.log("🎵 Auto-playing:", track.name);
@@ -255,10 +264,8 @@
             musicBtn.textContent = "🎵";
             musicBtn.classList.add("playing");
             musicPlaying = true;
-            console.log("✅ Playing:", track.name);
           })
-          .catch((err) => {
-            console.log("⚠️ Play blocked, waiting for interaction...");
+          .catch(() => {
             musicBtn.textContent = "🔇";
             musicBtn.classList.remove("playing");
             musicPlaying = false;
@@ -288,7 +295,6 @@
         localStorage.setItem("musicVolume", value);
       }
 
-      // Load saved volume
       const savedVolume = localStorage.getItem("musicVolume");
       if (savedVolume) {
         bgMusic.volume = savedVolume / 100;
@@ -334,17 +340,13 @@
       let currentCardIndex = -1;
       let rulesAccepted = false;
 
-      // ============ VIDEO LOCKING ============
       let isVideoPlaying = false;
       let isCompleteProcessing = false;
-
-      // ============ CARD STATE LOCKING ============
       let isCardLocked = false;
-
-      // ============ STORE ALL ANSWERS FOR RESULTS ============
       let allAnswers = [];
       let partnerName = "Partner";
 
+      // ============ LOAD QUESTIONS ============
       async function loadQuestions() {
         try {
           const res = await fetch("/questions.json");
@@ -368,8 +370,6 @@
         document.getElementById("acceptBtn").disabled = true;
         document.getElementById("acceptBtn").textContent = "Joining...";
 
-        const playerName = localStorage.getItem("playerName") || "Player";
-
         fetch("/api/ready", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -385,7 +385,6 @@
               document.getElementById("rulesOverlay").classList.add("hidden");
 
               if (data.isReady) {
-                // Game is ready to start
                 document.getElementById("waitingBoth").classList.add("hidden");
                 document
                   .getElementById("gameHeader")
@@ -393,7 +392,6 @@
                 document.getElementById("cardArea").classList.remove("hidden");
                 showCard();
               } else {
-                // Waiting for partner
                 document
                   .getElementById("waitingBoth")
                   .classList.remove("hidden");
@@ -425,10 +423,10 @@
             );
             const data = await res.json();
 
-            // Handle room not found
             if (data.phase === "not_found") {
               document.getElementById("statusText").textContent =
                 "Room not found. Please recreate.";
+              document.getElementById("fixRoomBtn").style.display = "block";
               return;
             }
 
@@ -443,13 +441,12 @@
               text.textContent = "Waiting for partner...";
             }
 
-            // Handle different phases
             if (data.phase === "waiting") {
               document.getElementById("waitingBoth").classList.remove("hidden");
               document.getElementById("gameHeader").classList.add("hidden");
               document.getElementById("cardArea").classList.add("hidden");
               document.getElementById("revealArea").classList.add("hidden");
-              return; // FIXED: replaced 'continue' with 'return'
+              return;
             }
 
             if (data.phase === "playing") {
@@ -463,7 +460,6 @@
                 data.currentCard !== currentCardIndex;
 
               if (cardChanged) {
-                // Check if we need to play a day video
                 if (
                   data.currentDay !== currentDayIndex &&
                   currentDayIndex >= 0
@@ -480,15 +476,12 @@
                 }
                 continueToDay(data);
               } else {
-                // Same card - check answer status
                 if (data.answers && data.answers[playerId]) {
-                  // We've answered
                   document.getElementById("submitBtn").classList.add("hidden");
                   document
                     .getElementById("waitingSubmit")
                     .classList.remove("hidden");
 
-                  // Show waiting message with count
                   const players = data.players || [];
                   const answeredCount = Object.keys(data.answers).length;
                   document.getElementById("waitingSubmit").textContent =
@@ -507,7 +500,6 @@
                 isCompleteProcessing = true;
                 isVideoPlaying = true;
 
-                // Play day 5 video
                 playDayVideo(5, function () {
                   isVideoPlaying = false;
                   isCompleteProcessing = false;
@@ -526,8 +518,6 @@
       function continueToDay(data) {
         currentDayIndex = data.currentDay;
         currentCardIndex = data.currentCard;
-
-        // Reset submission state for new card
         hasSubmitted = false;
         selectedOption = null;
 
@@ -535,13 +525,6 @@
         playTrack(musicKey);
         changeBackground("day" + (data.currentDay + 1));
         showCard();
-
-        // Show the correct card count
-        const day = questions.days[currentDayIndex];
-        if (day) {
-          document.getElementById("cardCounter").textContent =
-            `Card ${currentCardIndex + 1} of ${day.cards.length}`;
-        }
       }
 
       function showCard() {
@@ -551,7 +534,6 @@
         const card = day.cards[currentCardIndex];
         if (!card) return;
 
-        // Reset selection state
         selectedOption = null;
         hasSubmitted = false;
         isCardLocked = false;
@@ -564,7 +546,6 @@
         document.getElementById("cardTitle").textContent = card.cardTitle;
         document.getElementById("cardQuestion").textContent = card.question;
 
-        // Build options - ALWAYS include option E
         const optionsEntries = Object.entries(card.options);
         const hasE = optionsEntries.some(([letter]) => letter === "E");
 
@@ -577,8 +558,8 @@
           .map(
             ([letter, text]) =>
               `<button class="option" onclick="selectOption('${letter}', this)">
-                    <strong style="color:#d4af37;">${letter})</strong> ${text}
-                </button>`,
+              <strong style="color:#d4af37;">${letter})</strong> ${text}
+            </button>`,
           )
           .join("");
 
@@ -589,12 +570,10 @@
         document.getElementById("cardArea").classList.remove("hidden");
         document.getElementById("revealArea").classList.add("hidden");
 
-        // Reset pointer events on options
         document.querySelectorAll(".option").forEach((o) => {
           o.style.pointerEvents = "auto";
         });
 
-        // Hide waiting message
         document.getElementById("waitingSubmit").classList.add("hidden");
       }
 
@@ -637,7 +616,6 @@
             ? document.getElementById("customAnswer").value.trim()
             : null;
 
-        // ============ STORE ANSWER FOR RESULTS ============
         const day = questions.days[currentDayIndex];
         const card = day.cards[currentCardIndex];
         const optionText = card.options[selectedOption] || "Custom Answer";
@@ -692,9 +670,9 @@
           const fullText = options[choiceLetter] || "Custom Answer";
 
           document.getElementById("yourChoice").innerHTML = `
-                        <strong style="color:#d4af37;">You chose ${choiceLetter}:</strong><br>
-                        <span style="line-height:1.6;">${fullText}</span>
-                    `;
+          <strong style="color:#d4af37;">You chose ${choiceLetter}:</strong><br>
+          <span style="line-height:1.6;">${fullText}</span>
+        `;
 
           const yourCustom = document.getElementById("yourCustomText");
           if (myAnswer.customText) {
@@ -710,9 +688,9 @@
           const partnerFullText = options[partnerChoice] || "Custom Answer";
 
           document.getElementById("partnerChoice").innerHTML = `
-                        <strong style="color:#d4af37;">Partner chose ${partnerChoice}:</strong><br>
-                        <span style="line-height:1.6;">${partnerFullText}</span>
-                    `;
+          <strong style="color:#d4af37;">Partner chose ${partnerChoice}:</strong><br>
+          <span style="line-height:1.6;">${partnerFullText}</span>
+        `;
 
           const partnerCustom = document.getElementById("partnerCustomText");
           if (partnerAnswer.customText) {
@@ -741,14 +719,11 @@
         }
       }
 
-      // ============ SHOW COMPLETE WITH RESULTS SAVING ============
       function showComplete() {
         clearInterval(pollingInterval);
         document.getElementById("cardArea").classList.add("hidden");
         document.getElementById("revealArea").classList.add("hidden");
         document.getElementById("completeArea").classList.remove("hidden");
-
-        // Save results to server
         saveResults();
       }
 
@@ -767,9 +742,7 @@
 
           const response = await fetch("/api/save-results", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               roomCode: roomCode,
               results: results,
@@ -783,7 +756,39 @@
         }
       }
 
-      // ============ END OF DAY VIDEO (WITH CONTROLS) ============
+      // ============ FIX ROOM ============
+      async function fixRoom() {
+        if (
+          !confirm(
+            "This will clean up the room to exactly 2 players. Continue?",
+          )
+        )
+          return;
+
+        try {
+          const response = await fetch("/api/cleanup-room", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomCode: roomCode }),
+          });
+          const data = await response.json();
+          console.log("Fix room response:", data);
+
+          if (data.success) {
+            alert(
+              `✅ Room fixed! ${data.players.length} players active. Refreshing...`,
+            );
+            window.location.reload();
+          } else {
+            alert("❌ Failed to fix room: " + (data.error || "Unknown error"));
+          }
+        } catch (error) {
+          console.error("Error fixing room:", error);
+          alert("❌ Error fixing room: " + error.message);
+        }
+      }
+
+      // ============ END OF DAY VIDEO ============
       const videos = {
         day1: "/assets/videos/day1-complete.mp4",
         day2: "/assets/videos/day2-complete.mp4",
@@ -820,13 +825,7 @@
           bgMusic.pause();
           console.log("🔇 Background music paused for video");
         }
-        <button
-          class="btn"
-          onclick="fixRoom()"
-          style="margin-top:15px; background:#ff6b6b; color:white; text-transform:none;"
-        >
-          🔧 Fix Room (if stuck)
-        </button>;
+
         if (bgVideo) {
           bgVideo.pause();
         }
@@ -907,7 +906,7 @@
           }
         });
 
-      // Start everything
+      // ============ START ============
       loadQuestions();
       startPolling();
     </script>
