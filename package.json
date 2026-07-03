@@ -9,6 +9,7 @@
     "build": "node lib/build-questions.js"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.0",
     "@vercel/kv": "^3.0.0",
     "cors": "^2.8.5",
     "express": "^4.18.2"

@@ -25,7 +25,17 @@ export default async function handler(req, res) {
   }
 
   // Check if room already exists
-  const existingGame = await kv.get(`game:${roomCode}`);
+  let existingGame = null;
+  try {
+   existingGame = await kv.get(`game:${roomCode}`);
+  } catch (kvError) {
+   console.error('❌ KV Error checking room:', kvError);
+   return res.status(500).json({
+    error: 'Database connection error',
+    details: kvError.message
+   });
+  }
+
   if (existingGame) {
    console.log(`✅ Room ${roomCode} already exists`);
    return res.status(200).json({
@@ -46,20 +56,51 @@ export default async function handler(req, res) {
   };
 
   // Save game state
-  await kv.set(`game:${roomCode}`, gameState);
-  console.log(`✅ Game state saved for room ${roomCode}`);
+  try {
+   await kv.set(`game:${roomCode}`, gameState);
+   console.log(`✅ Game state saved for room ${roomCode}`);
+  } catch (saveError) {
+   console.error('❌ Error saving game state:', saveError);
+   return res.status(500).json({
+    error: 'Failed to save game state',
+    details: saveError.message
+   });
+  }
 
   // Save player name
-  await kv.set(`player:${playerId}:name`, playerName || 'Player');
-  console.log(`✅ Player name saved for ${playerId}`);
+  try {
+   await kv.set(`player:${playerId}:name`, playerName || 'Player');
+   console.log(`✅ Player name saved for ${playerId}`);
+  } catch (nameError) {
+   console.error('❌ Error saving player name:', nameError);
+   // Continue anyway
+  }
 
   // Add player to room
-  await kv.rpush(`room:${roomCode}:players`, playerId);
-  console.log(`✅ Player ${playerId} added to room ${roomCode}`);
+  try {
+   await kv.rpush(`room:${roomCode}:players`, playerId);
+   console.log(`✅ Player ${playerId} added to room ${roomCode}`);
+  } catch (playerError) {
+   console.error('❌ Error adding player:', playerError);
+   // Continue anyway
+  }
 
   // Verify the room was created
-  const verifyGame = await kv.get(`game:${roomCode}`);
+  let verifyGame = null;
+  try {
+   verifyGame = await kv.get(`game:${roomCode}`);
+  } catch (verifyError) {
+   console.error('❌ Error verifying room:', verifyError);
+  }
+
   console.log(`✅ Verification - Room ${roomCode} exists:`, !!verifyGame);
+
+  if (!verifyGame) {
+   return res.status(500).json({
+    error: 'Room creation failed',
+    message: 'Room was not saved properly'
+   });
+  }
 
   return res.status(200).json({
    success: true,
@@ -69,7 +110,7 @@ export default async function handler(req, res) {
   });
 
  } catch (error) {
-  console.error('Error in /api/create-game:', error);
+  console.error('❌ Error in /api/create-game:', error);
   return res.status(500).json({
    error: 'Failed to create game',
    details: error.message
