@@ -1,24 +1,31 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Card Game — Dashboard</title>
-  <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-  <main>
-    <h1>Dashboard</h1>
-    <div id="results">Loading...</div>
-  </main>
-  <script>
-    async function load() {
-      const res = await fetch('/api/results');
-      const data = await res.json();
-      const out = data.length ? data.map(r => `<div class="entry"><strong>${r.player||'Player'}</strong> ${r.score} — ${r.createdAt}</div>`).join('') : '<p>No results yet.</p>';
-      document.getElementById('results').innerHTML = out;
-    }
-    load();
-  </script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Card Game — Dashboard.</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Dashboard</h1>
+      <div id="results">Loading...</div>
+    </main>
+    <script>
+      async function load() {
+        const res = await fetch("/api/results");
+        const data = await res.json();
+        const out = data.length
+          ? data
+              .map(
+                (r) =>
+                  `<div class="entry"><strong>${r.player || "Player"}</strong> ${r.score} — ${r.createdAt}</div>`,
+              )
+              .join("")
+          : "<p>No results yet.</p>";
+        document.getElementById("results").innerHTML = out;
+      }
+      load();
+    </script>
+  </body>
 </html>
